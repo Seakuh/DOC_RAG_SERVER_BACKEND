@@ -4,7 +4,8 @@
       "Bash(npm install)",
       "Bash(npm run start:dev:*)",
       "Bash(npm install:*)",
-      "Bash(npm view:*)"
+      "Bash(npm view:*)",
+      "Bash(npm start)"
     ],
     "deny": [],
     "ask": []

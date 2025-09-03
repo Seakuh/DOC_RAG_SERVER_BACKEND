@@ -30,6 +30,11 @@ export class PineconeService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    // Initialize Pinecone connection asynchronously without blocking app startup
+    this.initializePinecone();
+  }
+
+  private async initializePinecone(): Promise<void> {
     try {
       // Validate configuration first
       const validation = this.pineconeConfigService.validateConfiguration();
@@ -37,7 +42,8 @@ export class PineconeService implements OnModuleInit {
         this.logger.error('❌ Pinecone configuration invalid:');
         validation.errors.forEach(error => this.logger.error(`   - ${error}`));
         this.logger.log(this.pineconeConfigService.getSetupInstructions());
-        throw new Error('Invalid Pinecone configuration. Check the logs above for setup instructions.');
+        this.logger.warn('⚠️ Pinecone initialization failed. Application will start but Pinecone features will be unavailable.');
+        return;
       }
 
       const config = this.pineconeConfigService.getConfiguration();
@@ -62,11 +68,15 @@ export class PineconeService implements OnModuleInit {
         this.logger.error('  - Index name does not exist');
         this.logger.error('  - Network connectivity issues');
         this.logger.log(this.pineconeConfigService.getSetupInstructions());
-        throw testError;
+        this.logger.warn('⚠️ Pinecone connection failed. Application will start but Pinecone features will be unavailable.');
+        this.pinecone = null;
+        this.index = null;
       }
     } catch (error) {
       this.logger.error('Failed to initialize Pinecone:', error);
-      throw error;
+      this.logger.warn('⚠️ Pinecone initialization failed. Application will start but Pinecone features will be unavailable.');
+      this.pinecone = null;
+      this.index = null;
     }
   }
 
@@ -75,6 +85,10 @@ export class PineconeService implements OnModuleInit {
     values: number[];
     metadata: DocumentMetadata & { text: string };
   }>): Promise<void> {
+    if (!this.index) {
+      throw new Error('Pinecone index is not initialized. Check your configuration and ensure the service started successfully.');
+    }
+
     try {
       const startTime = Date.now();
       
@@ -93,6 +107,10 @@ export class PineconeService implements OnModuleInit {
     topK: number = 5,
     filter?: Record<string, any>
   ): Promise<QueryResult[]> {
+    if (!this.index) {
+      throw new Error('Pinecone index is not initialized. Check your configuration and ensure the service started successfully.');
+    }
+
     try {
       const startTime = Date.now();
       
@@ -124,6 +142,10 @@ export class PineconeService implements OnModuleInit {
   }
 
   async deleteBySource(source: string): Promise<void> {
+    if (!this.index) {
+      throw new Error('Pinecone index is not initialized. Check your configuration and ensure the service started successfully.');
+    }
+
     try {
       const startTime = Date.now();
       
@@ -140,6 +162,10 @@ export class PineconeService implements OnModuleInit {
   }
 
   async deleteById(id: string): Promise<void> {
+    if (!this.index) {
+      throw new Error('Pinecone index is not initialized. Check your configuration and ensure the service started successfully.');
+    }
+
     try {
       await this.index.deleteOne(id);
       this.logger.log(`Deleted vector with id: ${id}`);
@@ -150,6 +176,10 @@ export class PineconeService implements OnModuleInit {
   }
 
   async getStats(): Promise<any> {
+    if (!this.index) {
+      throw new Error('Pinecone index is not initialized. Check your configuration and ensure the service started successfully.');
+    }
+
     try {
       const stats = await this.index.describeIndexStats();
       return stats;
