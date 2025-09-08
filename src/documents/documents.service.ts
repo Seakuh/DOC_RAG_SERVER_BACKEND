@@ -9,6 +9,7 @@ import { createWorker } from 'tesseract.js';
 import { EmbeddingsService } from '../embeddings/embeddings.service';
 import { PineconeService, DocumentMetadata } from '../pinecone/pinecone.service';
 import { LLMService } from '../llm/llm.service';
+import { ImageService } from '../image/image.service';
 import { UploadResponseDto } from './dto/upload-response.dto';
 
 export interface DocumentInfo {
@@ -21,6 +22,7 @@ export interface DocumentInfo {
   description?: string;
   tags?: string[];
   summary?: string;
+  fileUrl?: string;
 }
 
 @Injectable()
@@ -32,6 +34,7 @@ export class DocumentsService {
     private embeddingsService: EmbeddingsService,
     private pineconeService: PineconeService,
     private llmService: LLMService,
+    private imageService: ImageService,
   ) {}
 
   async processDocument(
@@ -45,6 +48,14 @@ export class DocumentsService {
 
     try {
       this.validateFile(file);
+
+      let fileUrl: string | undefined;
+      try {
+        fileUrl = await this.imageService.uploadDocument(file);
+        this.logger.log(`Uploaded file to Hetzner: ${fileUrl}`);
+      } catch (error) {
+        this.logger.warn(`Failed to upload file to Hetzner: ${error.message}`);
+      }
 
       const text = await this.extractText(file);
       if (!text.trim()) {
@@ -95,6 +106,7 @@ export class DocumentsService {
         description,
         tags: tags ? tags.split(',').map(tag => tag.trim()) : undefined,
         summary,
+        fileUrl,
       };
 
       this.documentsStore.set(documentId, documentInfo);
@@ -131,7 +143,11 @@ export class DocumentsService {
 
     await this.pineconeService.deleteBySource(existingDoc.filename);
 
-    return this.processDocument(file, name, description, tags);
+    const result = await this.processDocument(file, name, description, tags);
+    
+    this.documentsStore.delete(documentId);
+    
+    return result;
   }
 
   async deleteDocument(documentId: string): Promise<{ success: boolean }> {

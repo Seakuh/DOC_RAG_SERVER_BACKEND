@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document RAG Server - Test Upload</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .form-section {
+            padding: 40px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            background: #f9f9f9;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        input[type="file"]:hover {
+            border-color: #4facfe;
+            background: #f0f8ff;
+        }
+
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="text"]:focus, textarea:focus {
+            outline: none;
+            border-color: #4facfe;
+        }
+
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .file-info {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e8f4fd;
+            border-radius: 5px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .response-section {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .response-success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .response-error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4facfe;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .document-list {
+            margin-top: 40px;
+            padding: 30px;
+            background: #f8f9fa;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .document-item {
+            background: white;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .document-meta {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .query-section {
+            padding: 30px;
+            border-top: 1px solid #e0e0e0;
+            background: #f8f9fa;
+        }
+
+        .query-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .query-input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .query-btn {
+            padding: 12px 25px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .query-btn:hover {
+            background: #218838;
+        }
+
+        .query-results {
+            margin-top: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📄 Document RAG Server</h1>
+            <p>Upload and analyze your documents with AI</p>
+        </div>
+
+        <div class="form-section">
+            <form id="uploadForm" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="file">📁 Select Document:</label>
+                    <input type="file" id="file" name="file" accept=".pdf,.txt,.docx,.jpg,.jpeg,.png,.gif,.bmp,.tiff,.webp" required>
+                    <div class="file-info">
+                        Unterstützte Dateitypen: PDF, TXT, DOCX, JPG, PNG, GIF, BMP, TIFF, WEBP (Max: 10MB)
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="name">📝 Document Name (optional):</label>
+                    <input type="text" id="name" name="name" placeholder="Enter a custom name for your document">
+                </div>
+
+                <div class="form-group">
+                    <label for="description">📋 Description (optional):</label>
+                    <textarea id="description" name="description" placeholder="Describe what this document is about"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="tags">🏷️ Tags (optional):</label>
+                    <input type="text" id="tags" name="tags" placeholder="e.g., important, project, research (comma-separated)">
+                </div>
+
+                <button type="submit" class="btn" id="uploadBtn">
+                    🚀 Upload & Process Document
+                </button>
+            </form>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Processing document... This may take a moment.</p>
+            </div>
+
+            <div class="response-section" id="response"></div>
+        </div>
+
+        <div class="query-section">
+            <h2>🔍 Query Your Documents</h2>
+            <div class="query-form">
+                <input type="text" id="queryInput" class="query-input" placeholder="Ask a question about your documents...">
+                <button type="button" id="queryBtn" class="query-btn">Search</button>
+            </div>
+            <div class="query-results" id="queryResults"></div>
+        </div>
+
+        <div class="document-list">
+            <h2>📚 Uploaded Documents</h2>
+            <button type="button" onclick="loadDocuments()" class="btn" style="width: auto; padding: 10px 20px; margin-bottom: 20px;">
+                🔄 Refresh Document List
+            </button>
+            <div id="documentsList"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000/api/v1';
+
+        // Upload form handler
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            const fileInput = document.getElementById('file');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a file');
+                return;
+            }
+
+            formData.append('file', file);
+            formData.append('name', document.getElementById('name').value);
+            formData.append('description', document.getElementById('description').value);
+            formData.append('tags', document.getElementById('tags').value);
+
+            const uploadBtn = document.getElementById('uploadBtn');
+            const loading = document.getElementById('loading');
+            const response = document.getElementById('response');
+
+            uploadBtn.disabled = true;
+            loading.style.display = 'block';
+            response.style.display = 'none';
+
+            try {
+                const result = await fetch(`${API_BASE}/documents/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await result.json();
+
+                if (result.ok) {
+                    response.className = 'response-section response-success';
+                    response.innerHTML = `
+                        <h3>✅ Upload Successful!</h3>
+                        <p><strong>Document ID:</strong> ${data.documentId}</p>
+                        <p><strong>Filename:</strong> ${data.filename}</p>
+                        <p><strong>Chunks:</strong> ${data.chunks}</p>
+                        <p><strong>File Size:</strong> ${(data.fileSize / 1024).toFixed(2)} KB</p>
+                        ${data.summary ? `<p><strong>Summary:</strong> ${data.summary}</p>` : ''}
+                    `;
+                    document.getElementById('uploadForm').reset();
+                    loadDocuments(); // Refresh document list
+                } else {
+                    throw new Error(data.message || 'Upload failed');
+                }
+            } catch (error) {
+                response.className = 'response-section response-error';
+                response.innerHTML = `
+                    <h3>❌ Upload Failed</h3>
+                    <p>${error.message}</p>
+                `;
+            } finally {
+                uploadBtn.disabled = false;
+                loading.style.display = 'none';
+                response.style.display = 'block';
+            }
+        });
+
+        // Query handler
+        document.getElementById('queryBtn').addEventListener('click', async () => {
+            const query = document.getElementById('queryInput').value.trim();
+            
+            if (!query) {
+                alert('Please enter a question');
+                return;
+            }
+
+            const queryBtn = document.getElementById('queryBtn');
+            const resultsDiv = document.getElementById('queryResults');
+
+            queryBtn.disabled = true;
+            queryBtn.textContent = 'Searching...';
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = '<p>🔍 Searching through your documents...</p>';
+
+            try {
+                const response = await fetch(`${API_BASE}/query`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    resultsDiv.innerHTML = `
+                        <h3>🎯 Query Results</h3>
+                        <p><strong>Answer:</strong> ${data.answer}</p>
+                        <h4>📄 Similar Documents:</h4>
+                        ${data.similarDocuments.map(doc => `
+                            <div class="document-item">
+                                <strong>${doc.filename}</strong> (Score: ${doc.score.toFixed(3)})
+                                <div class="document-meta">${doc.text.substring(0, 200)}...</div>
+                            </div>
+                        `).join('')}
+                    `;
+                } else {
+                    throw new Error(data.message || 'Query failed');
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <h3>❌ Query Failed</h3>
+                    <p>${error.message}</p>
+                `;
+            } finally {
+                queryBtn.disabled = false;
+                queryBtn.textContent = 'Search';
+            }
+        });
+
+        // Load documents function
+        async function loadDocuments() {
+            const documentsList = document.getElementById('documentsList');
+            documentsList.innerHTML = '<p>Loading documents...</p>';
+
+            try {
+                const response = await fetch(`${API_BASE}/documents`);
+                const documents = await response.json();
+
+                if (documents.length === 0) {
+                    documentsList.innerHTML = '<p>No documents uploaded yet.</p>';
+                    return;
+                }
+
+                documentsList.innerHTML = documents.map(doc => `
+                    <div class="document-item">
+                        <h4>${doc.originalName}</h4>
+                        <div class="document-meta">
+                            <strong>ID:</strong> ${doc.id}<br>
+                            <strong>Filename:</strong> ${doc.filename}<br>
+                            <strong>Size:</strong> ${(doc.fileSize / 1024).toFixed(2)} KB<br>
+                            <strong>Chunks:</strong> ${doc.chunks}<br>
+                            <strong>Upload Date:</strong> ${new Date(doc.uploadDate).toLocaleString('de-DE')}<br>
+                            ${doc.fileUrl ? `<strong>File URL:</strong> <a href="${doc.fileUrl}" target="_blank">View on Hetzner</a><br>` : ''}
+                            ${doc.description ? `<strong>Description:</strong> ${doc.description}<br>` : ''}
+                            ${doc.tags ? `<strong>Tags:</strong> ${doc.tags.join(', ')}<br>` : ''}
+                            ${doc.summary ? `<strong>Summary:</strong> ${doc.summary}` : ''}
+                        </div>
+                        <button onclick="deleteDocument('${doc.id}')" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; margin-top: 10px; cursor: pointer;">
+                            🗑️ Delete
+                        </button>
+                    </div>
+                `).join('');
+            } catch (error) {
+                documentsList.innerHTML = `<p>Error loading documents: ${error.message}</p>`;
+            }
+        }
+
+        // Delete document function
+        async function deleteDocument(documentId) {
+            if (!confirm('Are you sure you want to delete this document?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/documents/${documentId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    alert('Document deleted successfully');
+                    loadDocuments();
+                } else {
+                    const data = await response.json();
+                    throw new Error(data.message || 'Delete failed');
+                }
+            } catch (error) {
+                alert(`Error deleting document: ${error.message}`);
+            }
+        }
+
+        // Load documents on page load
+        document.addEventListener('DOMContentLoaded', loadDocuments);
+
+        // Enter key support for query
+        document.getElementById('queryInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('queryBtn').click();
+            }
+        });
+
+        // File size validation
+        document.getElementById('file').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file && file.size > 10 * 1024 * 1024) {
+                alert('File size must be less than 10MB');
+                e.target.value = '';
+            }
+        });
+    </script>
+</body>
+</html>

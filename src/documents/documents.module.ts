@@ -5,6 +5,7 @@ import { DocumentsService } from './documents.service';
 import { EmbeddingsModule } from '../embeddings/embeddings.module';
 import { PineconeModule } from '../pinecone/pinecone.module';
 import { LLMModule } from '../llm/llm.module';
+import { ImageModule } from '../image/image.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { LLMModule } from '../llm/llm.module';
     EmbeddingsModule,
     PineconeModule,
     LLMModule,
+    ImageModule,
   ],
   controllers: [DocumentsController],
   providers: [DocumentsService],

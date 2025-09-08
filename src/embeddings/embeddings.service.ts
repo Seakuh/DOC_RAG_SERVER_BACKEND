@@ -26,11 +26,19 @@ export class EmbeddingsService {
   async generateEmbedding(text: string): Promise<number[]> {
     try {
       const startTime = Date.now();
-      
-      const response = await this.openai.embeddings.create({
-        model: this.configService.get<string>('EMBEDDING_MODEL', 'text-embedding-ada-002'),
+
+      const embeddingModel = this.configService.get<string>('EMBEDDING_MODEL', 'text-embedding-ada-002');
+      const embeddingConfig: any = {
+        model: embeddingModel,
         input: text,
-      });
+      };
+      
+      // For text-embedding-3-small, set dimensions to 1024 to match Pinecone index
+      if (embeddingModel === 'text-embedding-3-small') {
+        embeddingConfig.dimensions = 1024;
+      }
+
+      const response = await this.openai.embeddings.create(embeddingConfig);
 
       const duration = Date.now() - startTime;
       this.logger.log(`Generated embedding in ${duration}ms`);
@@ -45,23 +53,33 @@ export class EmbeddingsService {
   async generateBatchEmbeddings(texts: string[]): Promise<number[][]> {
     try {
       const startTime = Date.now();
-      
+
       // OpenAI API has a limit on batch size, process in chunks of 100
       const batchSize = 100;
       const results: number[][] = [];
 
       for (let i = 0; i < texts.length; i += batchSize) {
         const batch = texts.slice(i, i + batchSize);
-        
-        const response = await this.openai.embeddings.create({
-          model: this.configService.get<string>('EMBEDDING_MODEL', 'text-embedding-ada-002'),
+
+        const embeddingModel = this.configService.get<string>('EMBEDDING_MODEL', 'text-embedding-ada-002');
+        const embeddingConfig: any = {
+          model: embeddingModel,
           input: batch,
-        });
+        };
+        
+        // For text-embedding-3-small, set dimensions to 1024 to match Pinecone index
+        if (embeddingModel === 'text-embedding-3-small') {
+          embeddingConfig.dimensions = 1024;
+        }
+
+        const response = await this.openai.embeddings.create(embeddingConfig);
 
         const batchEmbeddings = response.data.map(item => item.embedding);
         results.push(...batchEmbeddings);
 
-        this.logger.log(`Processed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(texts.length / batchSize)}`);
+        this.logger.log(
+          `Processed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(texts.length / batchSize)}`,
+        );
       }
 
       const duration = Date.now() - startTime;
@@ -79,11 +97,11 @@ export class EmbeddingsService {
     chunkSize: number = 700,
     overlap: number = 100,
     source: string,
-    page?: number
+    page?: number,
   ): TextChunk[] {
     const chunks: TextChunk[] = [];
     const sentences = this.splitIntoSentences(text);
-    
+
     let currentChunk = '';
     let chunkIndex = 0;
     const timestamp = new Date().toISOString();
@@ -103,7 +121,7 @@ export class EmbeddingsService {
               page,
               chunk_index: chunkIndex++,
               timestamp,
-            }
+            },
           });
 
           // Handle overlap
@@ -120,7 +138,7 @@ export class EmbeddingsService {
                 page,
                 chunk_index: chunkIndex++,
                 timestamp,
-              }
+              },
             });
           }
         }
@@ -136,11 +154,13 @@ export class EmbeddingsService {
           page,
           chunk_index: chunkIndex,
           timestamp,
-        }
+        },
       });
     }
 
-    this.logger.log(`Split text into ${chunks.length} chunks (${chunkSize} chars, ${overlap} overlap)`);
+    this.logger.log(
+      `Split text into ${chunks.length} chunks (${chunkSize} chars, ${overlap} overlap)`,
+    );
     return chunks;
   }
 
@@ -157,10 +177,10 @@ export class EmbeddingsService {
     if (text.length <= overlapSize) {
       return text;
     }
-    
+
     const words = text.split(' ');
     let overlapText = '';
-    
+
     for (let i = words.length - 1; i >= 0; i--) {
       const candidateOverlap = words.slice(i).join(' ');
       if (candidateOverlap.length <= overlapSize) {
@@ -168,7 +188,7 @@ export class EmbeddingsService {
         break;
       }
     }
-    
+
     return overlapText;
   }
 
@@ -179,7 +199,7 @@ export class EmbeddingsService {
 
     for (const word of words) {
       const potentialPart = currentPart + (currentPart ? ' ' : '') + word;
-      
+
       if (potentialPart.length <= maxSize) {
         currentPart = potentialPart;
       } else {
