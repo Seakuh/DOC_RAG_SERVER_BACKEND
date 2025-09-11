@@ -11,7 +11,8 @@
       "Bash(mkdir:*)",
       "Bash(PORT=3001 npm run start:dev)",
       "Bash(curl:*)",
-      "WebFetch(domain:api.cognee.ai)"
+      "WebFetch(domain:api.cognee.ai)",
+      "Bash(lsof:*)"
     ],
     "deny": [],
     "ask": []

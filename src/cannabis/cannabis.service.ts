@@ -7,6 +7,8 @@ import { EmbeddingsService } from '../embeddings/embeddings.service';
 import { LLMService } from '../llm/llm.service';
 import { CogneeService } from '../cognee/cognee.service';
 import { ScientificQuestionDto, ScientificAnswerDto } from './dto/scientific-question.dto';
+import { ProcessStrainTextDto, ProcessedStrainResponseDto } from './dto/process-strain-text.dto';
+import { UploadDataDto, CogneeDataType } from '../cognee/dto/upload-data.dto';
 import { v4 as uuidv4 } from 'uuid';
 
 interface StrainMetadata {
@@ -425,6 +427,56 @@ export class CannabisService {
   }
 
   /**
+   * Process cannabis strain text and extract structured data using AI
+   */
+  async processStrainFromText(processTextDto: ProcessStrainTextDto): Promise<ProcessedStrainResponseDto> {
+    try {
+      const startTime = Date.now();
+      const strainId = uuidv4();
+      
+      this.logger.log(`Processing strain text: "${processTextDto.text.substring(0, 100)}..."`);
+
+      // Step 1: Extract structured strain data using LLM
+      const extractedStrain = await this.extractStrainDataFromText(processTextDto);
+      
+      // Step 2: Store in Cognee knowledge graph
+      const cogneeResult = await this.storeStrainInCognee(extractedStrain, processTextDto.text);
+      
+      // Step 3: Store in Pinecone vector database for recommendations
+      const pineconeResult = await this.storeStrainInPinecone(extractedStrain, strainId);
+      
+      const processingTime = Date.now() - startTime;
+
+      return {
+        id: strainId,
+        name: extractedStrain.name,
+        type: extractedStrain.type,
+        description: extractedStrain.description,
+        thc: extractedStrain.thc,
+        cbd: extractedStrain.cbd,
+        effects: extractedStrain.effects,
+        flavors: extractedStrain.flavors,
+        medical: extractedStrain.medical,
+        terpenes: extractedStrain.terpenes,
+        genetics: extractedStrain.genetics,
+        storedInCognee: cogneeResult.success,
+        cogneeId: cogneeResult.id,
+        processingTime,
+        confidence: extractedStrain.confidence,
+        metadata: {
+          extractedEntities: cogneeResult.entitiesCount || 0,
+          identifiedRelationships: cogneeResult.relationshipsCount || 0,
+          originalTextLength: processTextDto.text.length,
+          timestamp: new Date().toISOString()
+        }
+      };
+    } catch (error) {
+      this.logger.error(`Failed to process strain text: ${error.message}`, error.stack);
+      throw new BadRequestException(`Failed to process strain text: ${error.message}`);
+    }
+  }
+
+  /**
    * Answer scientific questions about cannabis using Cognee knowledge graph and research data
    */
   async answerScientificQuestion(questionDto: ScientificQuestionDto): Promise<ScientificAnswerDto> {
@@ -697,5 +749,267 @@ Jeder Wert soll ein Array von strings sein.
     }
     
     return 'Scientific relevance based on cannabinoid profile and reported effects.';
+  }
+
+  /**
+   * Extract structured strain data from text using AI
+   */
+  private async extractStrainDataFromText(processTextDto: ProcessStrainTextDto): Promise<any> {
+    const prompt = `
+Du bist ein Cannabis-Experte. Analysiere folgenden Text über eine Cannabis-Sorte und extrahiere strukturierte Daten:
+
+Text: "${processTextDto.text}"
+${processTextDto.strainNameHint ? `Strain Name Hint: ${processTextDto.strainNameHint}` : ''}
+${processTextDto.strainTypeHint ? `Strain Type Hint: ${processTextDto.strainTypeHint}` : ''}
+
+Extrahiere folgende Informationen und gib sie als JSON zurück:
+
+{
+  "name": "strain name (required)",
+  "type": "indica|sativa|hybrid (required)",
+  "description": "clean description summary (required)",
+  "thc": number or null,
+  "cbd": number or null,
+  "effects": ["array", "of", "effects"] (required),
+  "flavors": ["array", "of", "flavors"] or null,
+  "medical": ["array", "of", "medical", "uses"] or null,
+  "terpenes": [{"name": "terpene", "percentage": number}] or null,
+  "genetics": "parent strains" or null,
+  "breeder": "breeder name" or null,
+  "confidence": number between 0-1
+}
+
+Wichtige Regeln:
+1. Extrahiere nur Informationen die klar aus dem Text hervorgehen
+2. Wenn unsicher, setze confidence niedriger
+3. THC/CBD als Prozentzahlen ohne % Symbol
+4. Effects sind immer required - falls nicht klar, nutze Standard-Cannabis-Effekte
+5. Name muss extrahiert werden - falls nicht klar, generiere einen basierend auf den Eigenschaften
+6. Type muss indica, sativa oder hybrid sein
+7. Gib nur valides JSON zurück, keine anderen Texte
+
+Analysiere den Text sorgfältig und extrahiere die Daten:
+    `;
+
+    try {
+      const response = await this.llmService.generateResponse(prompt, []);
+      const extracted = JSON.parse(response.answer);
+      
+      // Validation and fallbacks
+      if (!extracted.name || !extracted.type || !extracted.effects?.length) {
+        throw new Error('Missing required fields in extraction');
+      }
+
+      return extracted;
+    } catch (error) {
+      this.logger.warn(`LLM extraction failed, using fallback: ${error.message}`);
+      
+      // Fallback extraction using simple text analysis
+      return this.fallbackStrainExtraction(processTextDto);
+    }
+  }
+
+  /**
+   * Fallback extraction using simple pattern matching
+   */
+  private fallbackStrainExtraction(processTextDto: ProcessStrainTextDto): any {
+    const text = processTextDto.text.toLowerCase();
+    
+    // Extract name
+    let name = processTextDto.strainNameHint || this.extractNameFromText(text) || 'Unknown Strain';
+    
+    // Extract type
+    let type = 'hybrid';
+    if (text.includes('indica') && !text.includes('sativa')) type = 'indica';
+    else if (text.includes('sativa') && !text.includes('indica')) type = 'sativa';
+    
+    // Extract THC/CBD
+    const thcMatch = text.match(/thc[\s:]*(\d+(?:\.\d+)?)/i);
+    const cbdMatch = text.match(/cbd[\s:]*(\d+(?:\.\d+)?)/i);
+    
+    // Extract basic effects
+    const effects = this.extractEffectsFromText(text);
+    
+    return {
+      name,
+      type,
+      description: processTextDto.text.substring(0, 200) + '...',
+      thc: thcMatch ? parseFloat(thcMatch[1]) : null,
+      cbd: cbdMatch ? parseFloat(cbdMatch[1]) : null,
+      effects: effects.length > 0 ? effects : ['relaxed', 'happy'],
+      flavors: this.extractFlavorsFromText(text),
+      medical: this.extractMedicalFromText(text),
+      terpenes: null,
+      genetics: null,
+      breeder: null,
+      confidence: 0.6
+    };
+  }
+
+  /**
+   * Store extracted strain data in Cognee knowledge graph
+   */
+  private async storeStrainInCognee(strainData: any, originalText: string): Promise<any> {
+    try {
+      const uploadData: UploadDataDto = {
+        content: originalText,
+        dataType: CogneeDataType.TEXT,
+        title: `Cannabis Strain: ${strainData.name}`,
+        metadata: {
+          source: 'strain_text_processing',
+          tags: ['cannabis', 'strain', strainData.type],
+          createdAt: new Date().toISOString(),
+          additionalData: {
+            extractedStrain: strainData,
+            processingMethod: 'ai_extraction',
+            strainName: strainData.name,
+            strainType: strainData.type,
+            thc: strainData.thc,
+            cbd: strainData.cbd,
+            effects: strainData.effects
+          }
+        }
+      };
+
+      const result = await this.cogneeService.uploadData(uploadData);
+      
+      return {
+        success: true,
+        id: result.id,
+        entitiesCount: result.entitiesCount,
+        relationshipsCount: result.relationshipsCount
+      };
+    } catch (error) {
+      this.logger.error(`Failed to store in Cognee: ${error.message}`);
+      return {
+        success: false,
+        id: null,
+        entitiesCount: 0,
+        relationshipsCount: 0
+      };
+    }
+  }
+
+  /**
+   * Store extracted strain in Pinecone for similarity search
+   */
+  private async storeStrainInPinecone(strainData: any, strainId: string): Promise<any> {
+    try {
+      // Create comprehensive text for embedding
+      const embeddingText = this.createStrainEmbeddingTextFromExtracted(strainData);
+      
+      // Generate embedding
+      const embedding = await this.embeddingsService.generateEmbedding(embeddingText);
+      
+      // Prepare metadata
+      const metadata: StrainMetadata = {
+        strainId,
+        name: strainData.name,
+        type: strainData.type,
+        description: strainData.description,
+        thc: strainData.thc,
+        cbd: strainData.cbd,
+        effects: strainData.effects,
+        flavors: strainData.flavors,
+        medical: strainData.medical,
+        terpenes: strainData.terpenes ? JSON.stringify(strainData.terpenes) : undefined,
+        genetics: strainData.genetics,
+        breeder: strainData.breeder,
+        rating: undefined,
+        createdAt: new Date().toISOString(),
+      };
+
+      // Store in Pinecone
+      await this.pineconeService.upsert([{
+        id: strainId,
+        values: embedding,
+        metadata: { 
+          ...metadata, 
+          text: embeddingText,
+          source: `cannabis-strain-${strainData.name}`,
+          chunk_index: 0,
+          timestamp: new Date().toISOString()
+        }
+      }]);
+
+      return { success: true };
+    } catch (error) {
+      this.logger.error(`Failed to store in Pinecone: ${error.message}`);
+      return { success: false };
+    }
+  }
+
+  /**
+   * Create embedding text from extracted strain data
+   */
+  private createStrainEmbeddingTextFromExtracted(strain: any): string {
+    const parts = [
+      `Cannabis strain: ${strain.name}`,
+      `Type: ${strain.type}`,
+      `Description: ${strain.description}`,
+      `Effects: ${strain.effects.join(', ')}`,
+    ];
+
+    if (strain.thc) parts.push(`THC: ${strain.thc}%`);
+    if (strain.cbd) parts.push(`CBD: ${strain.cbd}%`);
+    if (strain.flavors?.length) parts.push(`Flavors: ${strain.flavors.join(', ')}`);
+    if (strain.medical?.length) parts.push(`Medical uses: ${strain.medical.join(', ')}`);
+    if (strain.terpenes?.length) {
+      const terpeneNames = strain.terpenes.map((t: any) => `${t.name} (${t.percentage}%)`);
+      parts.push(`Terpenes: ${terpeneNames.join(', ')}`);
+    }
+    if (strain.genetics) parts.push(`Genetics: ${strain.genetics}`);
+
+    return parts.join('. ');
+  }
+
+  // Text extraction helper methods
+  private extractNameFromText(text: string): string | null {
+    // Look for quoted strain names or capitalized words
+    const patterns = [
+      /"([^"]+)"/,
+      /'([^']+)'/,
+      /strain[:\s]+([A-Z][A-Za-z\s]+)/i,
+      /called[:\s]+([A-Z][A-Za-z\s]+)/i
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match && match[1].length > 2 && match[1].length < 30) {
+        return match[1].trim();
+      }
+    }
+    return null;
+  }
+
+  private extractEffectsFromText(text: string): string[] {
+    const commonEffects = [
+      'relaxed', 'happy', 'euphoric', 'uplifted', 'creative', 'focused', 
+      'energetic', 'calm', 'sleepy', 'giggly', 'hungry', 'talkative'
+    ];
+
+    return commonEffects.filter(effect => 
+      text.includes(effect) || text.includes(effect.replace('ed', 'ing'))
+    );
+  }
+
+  private extractFlavorsFromText(text: string): string[] | null {
+    const commonFlavors = [
+      'sweet', 'earthy', 'citrus', 'berry', 'pine', 'fruity', 'spicy', 
+      'diesel', 'skunk', 'vanilla', 'chocolate', 'mint', 'lemon'
+    ];
+
+    const found = commonFlavors.filter(flavor => text.includes(flavor));
+    return found.length > 0 ? found : null;
+  }
+
+  private extractMedicalFromText(text: string): string[] | null {
+    const medicalUses = [
+      'pain', 'stress', 'anxiety', 'depression', 'insomnia', 'nausea', 
+      'headache', 'inflammation', 'seizures', 'ptsd'
+    ];
+
+    const found = medicalUses.filter(condition => text.includes(condition));
+    return found.length > 0 ? found : null;
   }
 }

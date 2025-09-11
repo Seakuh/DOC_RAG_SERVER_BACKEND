@@ -5,6 +5,7 @@ import { CreateStrainDto } from './dto/create-strain.dto';
 import { MoodRecommendationDto } from './dto/mood-recommendation.dto';
 import { StrainRecommendationResponseDto } from './dto/strain-recommendation.dto';
 import { ScientificQuestionDto, ScientificAnswerDto } from './dto/scientific-question.dto';
+import { ProcessStrainTextDto, ProcessedStrainResponseDto } from './dto/process-strain-text.dto';
 
 @ApiTags('cannabis')
 @Controller('cannabis')
@@ -159,6 +160,44 @@ export class CannabisController {
       averageRating: 0,
       lastUpdated: new Date().toISOString()
     };
+  }
+
+  @Post('process-strain-text')
+  @ApiOperation({ 
+    summary: 'Cannabis-Strain-Text verarbeiten und in Cognee-Datenbank speichern',
+    description: 'Nimmt beliebigen Text über einen Cannabis-Strain entgegen, extrahiert strukturierte Daten mit AI und speichert sie in der Cognee Knowledge Graph'
+  })
+  @ApiBody({ type: ProcessStrainTextDto })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'Cannabis-Strain erfolgreich aus Text extrahiert und in Cognee gespeichert',
+    type: ProcessedStrainResponseDto,
+    example: {
+      id: 'strain-uuid-123',
+      name: 'Blue Dream',
+      type: 'hybrid',
+      description: 'A balanced hybrid strain that provides cerebral euphoria followed by full-body relaxation',
+      thc: 19,
+      cbd: 0.1,
+      effects: ['happy', 'creative', 'relaxed'],
+      flavors: ['berry', 'sweet', 'earthy'],
+      medical: ['stress', 'depression', 'pain'],
+      terpenes: [{ name: 'myrcene', percentage: 0.8 }],
+      genetics: 'Blueberry x Haze',
+      storedInCognee: true,
+      cogneeId: 'strain-cognee-entry-456',
+      processingTime: 2500,
+      confidence: 0.92,
+      metadata: { extractedEntities: 12, identifiedRelationships: 8 }
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Ungültiger Text oder Parameter' })
+  @ApiResponse({ status: 500, description: 'Fehler bei der Textverarbeitung oder Cognee-Speicherung' })
+  async processStrainText(
+    @Body(new ValidationPipe()) processTextDto: ProcessStrainTextDto
+  ): Promise<ProcessedStrainResponseDto> {
+    this.logger.log(`Processing strain text: "${processTextDto.text.substring(0, 100)}..."`);
+    return await this.cannabisService.processStrainFromText(processTextDto);
   }
 
   @Post('scientific-question')
