@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { ContentAnalysis } from './upload-data.dto';
 
 export interface CogneeEntity {
   id: string;
@@ -23,6 +24,23 @@ export interface CogneeChunk {
   startIndex: number;
   endIndex: number;
   metadata: Record<string, any>;
+}
+
+export interface ScientificAnalysis {
+  isScientificPaper: boolean;
+  contentAnalysis?: ContentAnalysis;
+  paperType?: string;
+  extractedSections?: string[];
+  keywordCount?: number;
+  citationCount?: number;
+  scientificScore: number;
+  extractedMetadata?: {
+    title?: string;
+    authors: string[];
+    keywords: string[];
+    sections: string[];
+    citations: number;
+  };
 }
 
 export class CogneeUploadResponse {
@@ -55,6 +73,9 @@ export class CogneeUploadResponse {
 
   @ApiProperty({ description: 'Text chunks created from the data' })
   chunks?: CogneeChunk[];
+
+  @ApiProperty({ description: 'Scientific analysis results for academic papers' })
+  scientificAnalysis?: ScientificAnalysis;
 
   @ApiProperty({ description: 'Timestamp of when the data was processed' })
   timestamp: string;

@@ -1,20 +1,43 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, IsArray, IsEnum, ValidateNested, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
 
 export enum CogneeDataType {
   TEXT = 'text',
   DOCUMENT = 'document',
   URL = 'url',
   FILE = 'file',
-  STRUCTURED = 'structured'
+  STRUCTURED = 'structured',
 }
 
 export enum CogneeProcessingMode {
   CHUNKS = 'chunks',
   ENTITIES = 'entities',
   RELATIONSHIPS = 'relationships',
-  FULL = 'full'
+  FULL = 'full',
+}
+
+export interface ContentAnalysis {
+  hasAbstract: boolean;
+  hasIntroduction: boolean;
+  hasMethodology: boolean;
+  hasResults: boolean;
+  hasConclusion: boolean;
+  hasReferences: boolean;
+  citationCount: number;
+  scientificTerms: string[];
+  authors: string[];
+  keywords: string[];
+  sections: string[];
+  scientificScore: number;
 }
 
 export class CogneeMetadata {
@@ -29,15 +52,23 @@ export class CogneeMetadata {
   @IsString({ each: true })
   tags?: string[];
 
-  @ApiProperty({ description: 'Author or creator', example: 'John Doe' })
+  @ApiProperty({ description: 'Author or creator', example: ['John Doe', 'Jane Smith'] })
   @IsOptional()
-  @IsString()
-  author?: string;
+  author?: string | string[];
 
   @ApiProperty({ description: 'Creation date', example: '2025-09-11' })
   @IsOptional()
   @IsString()
   createdAt?: string;
+
+  @ApiProperty({ description: 'Whether this is identified as a scientific paper', example: true })
+  @IsOptional()
+  @IsBoolean()
+  isScientificPaper?: boolean;
+
+  @ApiProperty({ description: 'Content analysis results for scientific papers' })
+  @IsOptional()
+  contentAnalysis?: ContentAnalysis;
 
   @ApiProperty({ description: 'Additional metadata as key-value pairs' })
   @IsOptional()
@@ -45,59 +76,59 @@ export class CogneeMetadata {
 }
 
 export class UploadDataDto {
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'The text content to upload to Cognee',
-    example: 'This is important research data about cannabis effects and medical applications.'
+    example: 'This is important research data about cannabis effects and medical applications.',
   })
   @IsNotEmpty()
   @IsString()
   content: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Type of data being uploaded',
     enum: CogneeDataType,
-    example: CogneeDataType.TEXT
+    example: CogneeDataType.TEXT,
   })
   @IsEnum(CogneeDataType)
   dataType: CogneeDataType;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Title or identifier for the data',
-    example: 'Cannabis Research Document #1'
+    example: 'Cannabis Research Document #1',
   })
   @IsOptional()
   @IsString()
   title?: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Processing mode for Cognee',
     enum: CogneeProcessingMode,
-    example: CogneeProcessingMode.FULL
+    example: CogneeProcessingMode.FULL,
   })
   @IsOptional()
   @IsEnum(CogneeProcessingMode)
   processingMode?: CogneeProcessingMode = CogneeProcessingMode.FULL;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Metadata associated with the data',
-    type: CogneeMetadata
+    type: CogneeMetadata,
   })
   @IsOptional()
   @ValidateNested()
   @Type(() => CogneeMetadata)
   metadata?: CogneeMetadata;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Whether to create knowledge graph relationships',
-    example: true
+    example: true,
   })
   @IsOptional()
   @IsBoolean()
   createRelationships?: boolean = true;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Whether to extract entities from the data',
-    example: true
+    example: true,
   })
   @IsOptional()
   @IsBoolean()
