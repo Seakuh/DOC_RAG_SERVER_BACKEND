@@ -13,6 +13,7 @@ Ein vollständiges **RAG (Retrieval-Augmented Generation)** Backend-System basie
 - **🔍 Semantic Search**: Vektor-basierte Dokumentensuche mit Pinecone
 - **🤖 AI Question Answering**: Kontextuelle Antworten mit OpenAI GPT Modellen
 - **🌿 Cannabis Strain Recommendations**: AI-powered mood-basierte Cannabis-Empfehlungen mit Knowledge Graph-ähnlicher Funktionalität
+- **🧠 Cognee Knowledge Graph**: Erweiterte semantische Datenverarbeitung und Entitäts-Extraktion
 - **📊 Swagger API Documentation**: Vollständige API-Dokumentation
 - **⚡ Rate Limiting**: Schutz vor API-Missbrauch
 - **🔒 Input Validation**: Robuste Datenvalidierung mit class-validator
@@ -45,11 +46,16 @@ rag-backend/
 │   │   ├── query.controller.ts
 │   │   ├── query.service.ts
 │   │   └── dto/
-│   └── cannabis/          # Cannabis Strain Recommendations 🌿
-│       ├── cannabis.module.ts
-│       ├── cannabis.controller.ts
-│       ├── cannabis.service.ts
-│       └── dto/           # Cannabis-specific DTOs
+│   ├── cannabis/          # Cannabis Strain Recommendations 🌿
+│   │   ├── cannabis.module.ts
+│   │   ├── cannabis.controller.ts
+│   │   ├── cannabis.service.ts
+│   │   └── dto/           # Cannabis-specific DTOs
+│   └── cognee/           # Cognee Knowledge Graph 🧠
+│       ├── cognee.module.ts
+│       ├── cognee.controller.ts
+│       ├── cognee.service.ts
+│       └── dto/           # Cognee-specific DTOs
 ├── package.json
 ├── .env.example
 └── README.md
@@ -84,7 +90,11 @@ PINECONE_INDEX_NAME=rag-documents
 # OpenAI Configuration
 OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_MODEL=gpt-4
-EMBEDDING_MODEL=text-embedding-ada-002
+EMBEDDING_MODEL=text-embedding-3-small
+
+# Cognee Knowledge Graph Configuration
+COGNEE_API_KEY=your_cognee_api_key_here
+COGNEE_BASE_URL=https://api.cognee.ai/v1
 ```
 
 ### 3. Pinecone Index erstellen
@@ -92,15 +102,22 @@ EMBEDDING_MODEL=text-embedding-ada-002
 1. Gehe zu [Pinecone Console](https://app.pinecone.io/)
 2. Erstelle einen neuen Index mit folgenden Einstellungen:
    - **Name**: `rag-documents` (oder wie in `.env` konfiguriert)
-   - **Dimensions**: `1536` (für text-embedding-ada-002)
+   - **Dimensions**: `1024` (für text-embedding-3-small)
    - **Metric**: `cosine`
    - **Pod Type**: `starter` (für kostenlose Version)
 
-### 4. OpenAI API Key erhalten
+### 4. API Keys konfigurieren
 
+#### OpenAI API Key:
 1. Gehe zu [OpenAI Platform](https://platform.openai.com/api-keys)
 2. Erstelle einen neuen API Key
 3. Füge ihn in deine `.env` Datei ein
+
+#### Cognee API Key:
+1. Registriere dich bei [Cognee Platform](https://cognee.ai) 
+2. Generiere einen API Key im Dashboard
+3. Füge `COGNEE_API_KEY` in deine `.env` Datei ein
+4. Optional: Konfiguriere `COGNEE_BASE_URL` falls du eine eigene Cognee-Instanz nutzt
 
 ### 5. Anwendung starten
 
@@ -332,6 +349,148 @@ curl -X GET "http://localhost:3000/api/v1/cognee/stats" \
 - **Text-Dateien:** `.txt`, `.csv`, `.json`, `.md`, `.rtf`
 - **Maximale Dateigröße:** 10MB
 - **Verarbeitung:** Automatische Entitäts-Extraktion und Relationship-Mapping
+
+---
+
+## 🌿🧠 Cannabis & Cognee Integration: Wie funktioniert das zusammen?
+
+Diese Anwendung kombiniert **Cannabis-Empfehlungssysteme** mit **Cognee Knowledge Graph-Technologie** für eine umfassende, semantische Datenanalyse. Hier ist eine detaillierte Erklärung der Architektur:
+
+### 🔄 **Daten-Pipeline & Workflow:**
+
+#### **1. Cannabis Strain Management (Pinecone + OpenAI)**
+```
+Cannabis Strain → Text Embedding → Pinecone Vektor DB → AI Mood Analysis → Recommendation
+```
+
+**Funktionsweise:**
+- Cannabis-Strains werden mit detaillierten Informationen (THC/CBD, Terpene, Effekte) gespeichert
+- Jeder Strain wird in einen **hochdimensionalen Vektor** umgewandelt (OpenAI Embeddings)
+- Nutzer-Stimmung wird von **GPT-4** analysiert und in semantischen Text konvertiert
+- **Vektor-Ähnlichkeitssuche** findet passende Strains basierend auf Mood-Profil
+
+#### **2. Cognee Knowledge Graph (Advanced Semantics)**
+```
+Research Data → Entity Extraction → Relationship Mapping → Knowledge Graph → Query Interface
+```
+
+**Funktionsweise:**
+- Forschungsdaten und Texte werden hochgeladen
+- **Entitäts-Extraktion** identifiziert Cannabis-relevante Begriffe (THC, CBD, Terpene, Symptome)
+- **Beziehungs-Mapping** erstellt semantische Verbindungen zwischen Entitäten
+- **Natürlichsprachliche Queries** durchsuchen den Knowledge Graph
+
+### 🔗 **Synergie-Effekte:**
+
+#### **A) Enhanced Strain Discovery**
+```mermaid
+graph LR
+    A[User Mood] --> B[GPT Analysis]
+    B --> C[Vector Search]
+    C --> D[Strain Matches]
+    D --> E[Cognee Context]
+    E --> F[Enhanced Recommendations]
+```
+
+- Cannabis-System findet Basis-Matches
+- Cognee liefert zusätzlichen **wissenschaftlichen Kontext**
+- Kombinierte Empfehlungen sind **präziser und informierter**
+
+#### **B) Research-Driven Recommendations**
+```mermaid
+graph TD
+    A[Research Papers] --> B[Cognee Processing]
+    B --> C[Entity Graph]
+    C --> D[Strain Database]
+    D --> E[Evidence-Based Recommendations]
+```
+
+- Wissenschaftliche Studien werden in Cognee verarbeitet
+- Extrahierte Erkenntnisse **validieren Cannabis-Empfehlungen**
+- Nutzer erhalten **evidenz-basierte Begründungen**
+
+### 🎯 **Praktische Anwendungsfälle:**
+
+#### **Szenario 1: Mood-basierte Empfehlung mit Wissenschaftskontext**
+```bash
+# 1. Strain-Empfehlung basierend auf Stimmung
+curl -X POST "/api/v1/cannabis/recommendations" -d '{
+  "moodDescription": "Stressed from work, need relaxation",
+  "timeOfDay": "evening"
+}'
+
+# 2. Zusätzlicher Kontext aus Cognee Knowledge Graph
+curl -X POST "/api/v1/cognee/query" -d '{
+  "query": "Stress-relief mechanisms of recommended terpenes"
+}'
+```
+
+#### **Szenario 2: Forschung-zu-Praxis Pipeline**
+```bash
+# 1. Neue Forschung zu Cognee hinzufügen
+curl -X POST "/api/v1/cognee/upload/file" \
+  -F "file=@new_cannabis_study.txt" \
+  -F "tags=research,clinical-trial"
+
+# 2. Erkenntnisse in Cannabis-Empfehlungen integrieren
+curl -X POST "/api/v1/cannabis/recommendations" -d '{
+  "moodDescription": "Looking for evidence-based anxiety relief"
+}'
+```
+
+### 🏗️ **Technische Architektur:**
+
+#### **Datenfluss:**
+1. **Input Layer**: User Mood/Research Data
+2. **Processing Layer**: GPT Analysis/Cognee Entity Extraction  
+3. **Storage Layer**: Pinecone Vectors/Knowledge Graph
+4. **Retrieval Layer**: Semantic Search/Graph Queries
+5. **Output Layer**: Enhanced Recommendations/Context
+
+#### **Shared Components:**
+- **OpenAI GPT-4**: Mood Analysis + Entity Reasoning
+- **Vector Embeddings**: Semantic Similarity für beide Module
+- **NestJS Framework**: Unified API Architecture
+- **TypeScript DTOs**: Type-safe Data Flow
+
+### 🔬 **Wissenschaftlicher Mehrwert:**
+
+#### **Evidence-Based Cannabis Recommendations:**
+```typescript
+interface EnhancedRecommendation {
+  strain: CannabiStrain;
+  moodMatch: number;
+  scientificEvidence: {
+    studies: ResearchPaper[];
+    mechanisms: string[];
+    contraindications: string[];
+  };
+  cogneeInsights: {
+    relatedEntities: Entity[];
+    supportingRelationships: Relationship[];
+  };
+}
+```
+
+#### **Dynamisches Lernen:**
+- Neue Forschung **aktualisiert automatisch** Empfehlungslogik
+- Knowledge Graph **erweitert sich kontinuierlich**
+- **Feedback-Loops** verbessern Accuracy über Zeit
+
+### 🚀 **Erweiterte Use Cases:**
+
+1. **Medical Professional Dashboard**: Ärzte können evidenz-basierte Cannabis-Verschreibungen machen
+2. **Research Platform**: Wissenschaftler können neue Erkenntnisse mit existierenden Strain-Daten verknüpfen  
+3. **Patient Journey Tracking**: Langzeit-Outcomes mit wissenschaftlichen Erkenntnissen korrelieren
+4. **Regulatory Compliance**: Automatische Generierung von Sicherheits- und Wirksamkeitsberichten
+
+### 💡 **Warum diese Kombination?**
+
+**Cannabis allein**: Gute Empfehlungen basierend auf Nutzer-Präferenzen
+**Cognee allein**: Mächtige semantische Datenanalyse ohne Domänen-Fokus
+**Cannabis + Cognee**: **Wissenschaftlich validierte, personalisierte Cannabis-Medizin**
+
+Diese Integration macht aus subjektiven Empfehlungen **objektive, datengetriebene Entscheidungshilfen** für medizinisches Cannabis.
 
 ---
 
