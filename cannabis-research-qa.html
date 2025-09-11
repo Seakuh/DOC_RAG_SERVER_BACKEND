@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cannabis Research Q&A - AI-Powered Scientific Assistant</title>
+    <style>
+        :root {
+            --primary-color: #2d5016;
+            --secondary-color: #4caf50;
+            --accent-color: #81c784;
+            --bg-gradient-start: #f1f8e9;
+            --bg-gradient-end: #e8f5e8;
+            --card-bg: rgba(255, 255, 255, 0.95);
+            --text-primary: #1b5e20;
+            --text-secondary: #4a5568;
+            --shadow: 0 10px 25px rgba(45, 80, 22, 0.15);
+            --border-radius: 16px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end));
+            min-height: 100vh;
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            min-height: 100vh;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+            position: relative;
+        }
+
+        .header::before {
+            content: '🌿🧠';
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 3rem;
+            opacity: 0.8;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            margin-top: 2rem;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .main-card {
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 2.5rem;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(76, 175, 80, 0.2);
+        }
+
+        .question-section {
+            margin-bottom: 2rem;
+        }
+
+        .question-section h3 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+
+        .textarea-container {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+
+        #questionInput {
+            width: 100%;
+            min-height: 120px;
+            padding: 1rem;
+            border: 2px solid rgba(76, 175, 80, 0.3);
+            border-radius: 12px;
+            font-size: 1rem;
+            font-family: inherit;
+            resize: vertical;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.9);
+        }
+
+        #questionInput:focus {
+            outline: none;
+            border-color: var(--secondary-color);
+            box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+            background: white;
+        }
+
+        .options-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .form-group label {
+            font-weight: 500;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        .form-group select, .form-group input {
+            padding: 0.75rem;
+            border: 2px solid rgba(76, 175, 80, 0.3);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.9);
+        }
+
+        .form-group select:focus, .form-group input:focus {
+            outline: none;
+            border-color: var(--secondary-color);
+            box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(45, 80, 22, 0.3);
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading-spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 0.5rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .answer-section {
+            margin-top: 2rem;
+            display: none;
+        }
+
+        .answer-card {
+            background: linear-gradient(135deg, rgba(76, 175, 80, 0.05), rgba(129, 199, 132, 0.05));
+            border: 2px solid rgba(76, 175, 80, 0.2);
+            border-radius: var(--border-radius);
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .confidence-bar {
+            background: rgba(76, 175, 80, 0.2);
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--secondary-color), var(--accent-color));
+            transition: width 1s ease;
+            border-radius: 4px;
+        }
+
+        .sources-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .source-card {
+            background: white;
+            border: 1px solid rgba(76, 175, 80, 0.2);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 12px rgba(45, 80, 22, 0.1);
+        }
+
+        .source-card h5 {
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+        }
+
+        .source-meta {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .tag {
+            background: rgba(76, 175, 80, 0.1);
+            color: var(--primary-color);
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .insights-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        .insight-card {
+            background: white;
+            border-left: 4px solid var(--secondary-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 8px rgba(45, 80, 22, 0.1);
+        }
+
+        .insight-card h6 {
+            color: var(--primary-color);
+            margin-bottom: 0.75rem;
+            font-size: 0.95rem;
+            font-weight: 600;
+        }
+
+        .insight-card ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .insight-card li {
+            padding: 0.25rem 0;
+            padding-left: 1rem;
+            position: relative;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .insight-card li::before {
+            content: '•';
+            color: var(--secondary-color);
+            position: absolute;
+            left: 0;
+        }
+
+        .metadata-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: rgba(76, 175, 80, 0.05);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .error-message {
+            background: linear-gradient(135deg, #ffebee, #ffcdd2);
+            border: 2px solid #ef5350;
+            border-radius: 12px;
+            padding: 1rem;
+            color: #c62828;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .example-questions {
+            margin-top: 1rem;
+        }
+
+        .example-questions h4 {
+            color: var(--primary-color);
+            margin-bottom: 0.75rem;
+            font-size: 1rem;
+        }
+
+        .example-btn {
+            background: rgba(76, 175, 80, 0.1);
+            border: 1px solid rgba(76, 175, 80, 0.3);
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            margin: 0.25rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.85rem;
+            color: var(--primary-color);
+        }
+
+        .example-btn:hover {
+            background: rgba(76, 175, 80, 0.2);
+            border-color: var(--secondary-color);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .main-card {
+                padding: 1.5rem;
+            }
+
+            .options-row {
+                grid-template-columns: 1fr;
+            }
+
+            .sources-grid, .insights-section {
+                grid-template-columns: 1fr;
+            }
+
+            .metadata-footer {
+                flex-direction: column;
+                gap: 0.5rem;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Cannabis Research Q&A</h1>
+            <p>Wissenschaftliche Cannabis-Fragen mit KI-gestützter Forschungsanalyse • Cognee Knowledge Graph Integration</p>
+        </div>
+
+        <div class="main-card">
+            <div class="question-section">
+                <h3>Stellen Sie eine wissenschaftliche Frage über Cannabis</h3>
+                
+                <div class="textarea-container">
+                    <textarea 
+                        id="questionInput" 
+                        placeholder="z.B. Welche Wirkmechanismen hat CBD bei der Behandlung von Epilepsie? Wie wirken Terpene auf das Endocannabinoid-System? Welche klinische Evidenz gibt es für Cannabis bei chronischen Schmerzen?"
+                        rows="4"></textarea>
+                </div>
+
+                <div class="options-row">
+                    <div class="form-group">
+                        <label for="contextInput">Fachbereich (optional)</label>
+                        <select id="contextInput">
+                            <option value="">Allgemein</option>
+                            <option value="neurologie">Neurologie</option>
+                            <option value="pharmacology">Pharmakologie</option>
+                            <option value="psychiatry">Psychiatrie</option>
+                            <option value="oncology">Onkologie</option>
+                            <option value="pain-medicine">Schmerzmedizin</option>
+                            <option value="biochemistry">Biochemie</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="maxSourcesInput">Max. Quellen</label>
+                        <input type="number" id="maxSourcesInput" min="1" max="20" value="5">
+                    </div>
+                </div>
+
+                <button id="submitBtn" class="submit-btn">
+                    <div class="loading-spinner" id="loadingSpinner"></div>
+                    <span id="btnText">Wissenschaftliche Antwort generieren</span>
+                </button>
+
+                <div class="example-questions">
+                    <h4>💡 Beispiel-Fragen:</h4>
+                    <button class="example-btn" onclick="fillExample('Welche molekularen Mechanismen sind für die antikonvulsive Wirkung von CBD verantwortlich?')">CBD & Epilepsie</button>
+                    <button class="example-btn" onclick="fillExample('Wie interagiert THC mit dem Endocannabinoid-System im Vergleich zu synthetischen Cannabinoiden?')">THC Wirkmechanismus</button>
+                    <button class="example-btn" onclick="fillExample('Welche Rolle spielen Terpene beim Entourage-Effekt und gibt es dafür wissenschaftliche Belege?')">Entourage-Effekt</button>
+                    <button class="example-btn" onclick="fillExample('Welche klinischen Studien belegen die Wirksamkeit von Cannabis bei neuropathischen Schmerzen?')">Neuropathische Schmerzen</button>
+                </div>
+            </div>
+
+            <div class="error-message" id="errorMessage"></div>
+
+            <div class="answer-section" id="answerSection">
+                <div class="answer-card">
+                    <h3 style="color: var(--primary-color); margin-bottom: 1rem;">📊 Wissenschaftliche Antwort</h3>
+                    <div id="answerText"></div>
+                    
+                    <h4 style="color: var(--primary-color); margin: 1.5rem 0 0.5rem 0;">🎯 Vertrauen</h4>
+                    <div class="confidence-bar">
+                        <div class="confidence-fill" id="confidenceBar"></div>
+                    </div>
+                    <span id="confidenceText"></span>
+                </div>
+
+                <h4 style="color: var(--primary-color); margin: 1.5rem 0 1rem 0;">📚 Wissenschaftliche Quellen</h4>
+                <div class="sources-grid" id="sourcesGrid"></div>
+
+                <h4 style="color: var(--primary-color); margin: 1.5rem 0 1rem 0;">🔬 Wissenschaftliche Erkenntnisse</h4>
+                <div class="insights-section" id="insightsSection"></div>
+
+                <h4 style="color: var(--primary-color); margin: 1.5rem 0 1rem 0;">🌿 Verwandte Cannabis-Strains</h4>
+                <div id="relatedStrains"></div>
+
+                <div class="metadata-footer" id="metadataFooter"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:3001/api/v1';
+
+        document.getElementById('submitBtn').addEventListener('click', askScientificQuestion);
+        document.getElementById('questionInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                askScientificQuestion();
+            }
+        });
+
+        function fillExample(question) {
+            document.getElementById('questionInput').value = question;
+            document.getElementById('questionInput').focus();
+        }
+
+        async function askScientificQuestion() {
+            const question = document.getElementById('questionInput').value.trim();
+            if (!question) {
+                showError('Bitte geben Sie eine Frage ein');
+                return;
+            }
+
+            const context = document.getElementById('contextInput').value;
+            const maxSources = parseInt(document.getElementById('maxSourcesInput').value) || 5;
+
+            setLoading(true);
+            hideError();
+            hideAnswer();
+
+            const requestData = {
+                question: question,
+                context: context || undefined,
+                maxSources: maxSources,
+                language: 'de'
+            };
+
+            try {
+                console.log('Sending request:', requestData);
+                
+                const response = await fetch(`${API_BASE_URL}/cannabis/scientific-question`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                console.log('Response:', result);
+                
+                displayAnswer(result);
+
+            } catch (error) {
+                console.error('Error:', error);
+                showError(`Fehler bei der Verarbeitung: ${error.message}`);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function displayAnswer(data) {
+            // Display main answer
+            document.getElementById('answerText').innerHTML = `<p style="font-size: 1.1rem; line-height: 1.8;">${data.answer.replace(/\n/g, '<br>')}</p>`;
+
+            // Display confidence
+            const confidence = (data.confidence * 100).toFixed(1);
+            document.getElementById('confidenceBar').style.width = `${confidence}%`;
+            document.getElementById('confidenceText').textContent = `${confidence}% Vertrauen basierend auf verfügbaren Quellen`;
+
+            // Display sources
+            const sourcesGrid = document.getElementById('sourcesGrid');
+            sourcesGrid.innerHTML = '';
+            if (data.sources && data.sources.length > 0) {
+                data.sources.forEach(source => {
+                    const sourceCard = document.createElement('div');
+                    sourceCard.className = 'source-card';
+                    sourceCard.innerHTML = `
+                        <h5>${source.title}</h5>
+                        <div class="source-meta">
+                            <span class="tag">${source.type.replace('_', ' ')}</span>
+                            <span>Relevanz: ${(source.relevanceScore * 100).toFixed(1)}%</span>
+                            ${source.year ? `<span>${source.year}</span>` : ''}
+                        </div>
+                        <ul>
+                            ${source.keyFindings.map(finding => `<li>${finding}</li>`).join('')}
+                        </ul>
+                        ${source.journal ? `<p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem;"><em>${source.journal}</em></p>` : ''}
+                    `;
+                    sourcesGrid.appendChild(sourceCard);
+                });
+            } else {
+                sourcesGrid.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Keine spezifischen Quellen verfügbar</p>';
+            }
+
+            // Display insights
+            const insightsSection = document.getElementById('insightsSection');
+            insightsSection.innerHTML = '';
+            if (data.insights) {
+                const insightTypes = [
+                    { key: 'mechanismsOfAction', title: 'Wirkmechanismen', icon: '⚗️' },
+                    { key: 'clinicalEvidence', title: 'Klinische Evidenz', icon: '🏥' },
+                    { key: 'contraindications', title: 'Kontraindikationen', icon: '⚠️' },
+                    { key: 'futureResearch', title: 'Zukunftsforschung', icon: '🔬' }
+                ];
+
+                insightTypes.forEach(type => {
+                    if (data.insights[type.key] && data.insights[type.key].length > 0) {
+                        const insightCard = document.createElement('div');
+                        insightCard.className = 'insight-card';
+                        insightCard.innerHTML = `
+                            <h6>${type.icon} ${type.title}</h6>
+                            <ul>
+                                ${data.insights[type.key].map(item => `<li>${item}</li>`).join('')}
+                            </ul>
+                        `;
+                        insightsSection.appendChild(insightCard);
+                    }
+                });
+            }
+
+            // Display related strains
+            const relatedStrainsDiv = document.getElementById('relatedStrains');
+            if (data.relatedStrains && data.relatedStrains.length > 0) {
+                relatedStrainsDiv.innerHTML = data.relatedStrains.map(strain => `
+                    <div class="source-card" style="margin-bottom: 1rem;">
+                        <h5>🌿 ${strain.name}</h5>
+                        <div class="source-meta">
+                            <span class="tag">${strain.relevance}</span>
+                        </div>
+                        <p style="font-size: 0.9rem; color: var(--text-secondary);">${strain.scientificBasis}</p>
+                    </div>
+                `).join('');
+            } else {
+                relatedStrainsDiv.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 1rem;">Keine verwandten Strains gefunden</p>';
+            }
+
+            // Display metadata
+            const metadataFooter = document.getElementById('metadataFooter');
+            metadataFooter.innerHTML = `
+                <span>⏱️ Verarbeitung: ${data.metadata.processingTime}ms</span>
+                <span>📊 ${data.metadata.sourcesAnalyzed} Quellen analysiert</span>
+                <span>🧠 ${data.metadata.cogneeEntitiesFound} Entitäten gefunden</span>
+                <span>📅 ${new Date(data.metadata.timestamp).toLocaleString('de-DE')}</span>
+            `;
+
+            showAnswer();
+        }
+
+        function setLoading(loading) {
+            const btn = document.getElementById('submitBtn');
+            const spinner = document.getElementById('loadingSpinner');
+            const btnText = document.getElementById('btnText');
+
+            if (loading) {
+                btn.disabled = true;
+                spinner.style.display = 'inline-block';
+                btnText.textContent = 'Analysiere wissenschaftliche Daten...';
+            } else {
+                btn.disabled = false;
+                spinner.style.display = 'none';
+                btnText.textContent = 'Wissenschaftliche Antwort generieren';
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        function showAnswer() {
+            document.getElementById('answerSection').style.display = 'block';
+            document.getElementById('answerSection').scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'start' 
+            });
+        }
+
+        function hideAnswer() {
+            document.getElementById('answerSection').style.display = 'none';
+        }
+
+        // Initialize with a subtle animation
+        document.addEventListener('DOMContentLoaded', function() {
+            const mainCard = document.querySelector('.main-card');
+            mainCard.style.opacity = '0';
+            mainCard.style.transform = 'translateY(20px)';
+            
+            setTimeout(() => {
+                mainCard.style.transition = 'all 0.6s ease';
+                mainCard.style.opacity = '1';
+                mainCard.style.transform = 'translateY(0)';
+            }, 100);
+        });
+    </script>
+</body>
+</html>

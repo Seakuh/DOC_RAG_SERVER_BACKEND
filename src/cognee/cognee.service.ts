@@ -1,6 +1,6 @@
 import { Injectable, Logger, BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import axios from 'axios';
 import { UploadDataDto } from './dto/upload-data.dto';
 import { CogneeUploadResponse, CogneeQueryResponse, CogneeHealthResponse } from './dto/cognee-response.dto';
 import { v4 as uuidv4 } from 'uuid';
@@ -10,7 +10,7 @@ import * as path from 'path';
 @Injectable()
 export class CogneeService {
   private readonly logger = new Logger(CogneeService.name);
-  private readonly httpClient: AxiosInstance;
+  private readonly httpClient: any;
   private readonly cogneeApiKey: string;
   private readonly cogneeBaseUrl: string;
 

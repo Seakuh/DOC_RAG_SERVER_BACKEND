@@ -4,6 +4,7 @@ import { CannabisService } from './cannabis.service';
 import { CreateStrainDto } from './dto/create-strain.dto';
 import { MoodRecommendationDto } from './dto/mood-recommendation.dto';
 import { StrainRecommendationResponseDto } from './dto/strain-recommendation.dto';
+import { ScientificQuestionDto, ScientificAnswerDto } from './dto/scientific-question.dto';
 
 @ApiTags('cannabis')
 @Controller('cannabis')
@@ -158,5 +159,51 @@ export class CannabisController {
       averageRating: 0,
       lastUpdated: new Date().toISOString()
     };
+  }
+
+  @Post('scientific-question')
+  @ApiOperation({ 
+    summary: 'Wissenschaftliche Cannabis-Fragen mit Cognee-Integration beantworten',
+    description: 'Beantwortet wissenschaftliche Fragen über Cannabis basierend auf Forschungsdaten aus dem Cognee Knowledge Graph und der Cannabis-Strain-Datenbank'
+  })
+  @ApiBody({ type: ScientificQuestionDto })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Wissenschaftliche Antwort mit Quellen und Erkenntnissen',
+    type: ScientificAnswerDto,
+    example: {
+      answer: 'CBD (Cannabidiol) wirkt bei der Behandlung von Epilepsie hauptsächlich durch...',
+      confidence: 0.87,
+      sources: [
+        {
+          title: 'CBD und Epilepsie Studie 2023',
+          type: 'clinical_study',
+          relevanceScore: 0.92,
+          keyFindings: ['CBD reduziert Anfallshäufigkeit um 38%'],
+          year: 2023
+        }
+      ],
+      relatedEntities: [
+        {
+          name: 'CBD',
+          type: 'Compound',
+          relationship: 'modulates',
+          confidence: 0.95
+        }
+      ],
+      metadata: {
+        processingTime: 3500,
+        sourcesAnalyzed: 5,
+        cogneeEntitiesFound: 12
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Ungültige Frage oder Parameter' })
+  @ApiResponse({ status: 500, description: 'Fehler bei der Verarbeitung der wissenschaftlichen Frage' })
+  async askScientificQuestion(
+    @Body(new ValidationPipe()) questionDto: ScientificQuestionDto
+  ): Promise<ScientificAnswerDto> {
+    this.logger.log(`Processing scientific question: "${questionDto.question.substring(0, 100)}..."`);
+    return await this.cannabisService.answerScientificQuestion(questionDto);
   }
 }
