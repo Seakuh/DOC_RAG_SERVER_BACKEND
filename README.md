@@ -12,6 +12,7 @@ Ein vollständiges **RAG (Retrieval-Augmented Generation)** Backend-System basie
 - **📄 Document Upload & Processing**: Unterstützung für PDF, TXT, DOCX und Bilddateien (JPG, PNG, GIF, BMP, TIFF, WEBP) mit OCR
 - **🔍 Semantic Search**: Vektor-basierte Dokumentensuche mit Pinecone
 - **🤖 AI Question Answering**: Kontextuelle Antworten mit OpenAI GPT Modellen
+- **🌿 Cannabis Strain Recommendations**: AI-powered mood-basierte Cannabis-Empfehlungen mit Knowledge Graph-ähnlicher Funktionalität
 - **📊 Swagger API Documentation**: Vollständige API-Dokumentation
 - **⚡ Rate Limiting**: Schutz vor API-Missbrauch
 - **🔒 Input Validation**: Robuste Datenvalidierung mit class-validator
@@ -39,11 +40,16 @@ rag-backend/
 │   ├── llm/               # Large Language Model
 │   │   ├── llm.module.ts
 │   │   └── llm.service.ts
-│   └── query/             # Query & RAG Functionality
-│       ├── query.module.ts
-│       ├── query.controller.ts
-│       ├── query.service.ts
-│       └── dto/
+│   ├── query/             # Query & RAG Functionality
+│   │   ├── query.module.ts
+│   │   ├── query.controller.ts
+│   │   ├── query.service.ts
+│   │   └── dto/
+│   └── cannabis/          # Cannabis Strain Recommendations 🌿
+│       ├── cannabis.module.ts
+│       ├── cannabis.controller.ts
+│       ├── cannabis.service.ts
+│       └── dto/           # Cannabis-specific DTOs
 ├── package.json
 ├── .env.example
 └── README.md
@@ -131,6 +137,14 @@ Swagger Dokumentation: `http://localhost:3000/api`
 - `GET /api/v1/query/explain` - Query-Prozess erklären
 - `GET /api/v1/query/stats` - Query Statistiken
 
+### Cannabis Strain Management & Recommendations 🌿
+- `POST /api/v1/cannabis/strains` - Cannabis Strain hinzufügen
+- `POST /api/v1/cannabis/recommendations` - Mood-basierte Strain-Empfehlungen
+- `GET /api/v1/cannabis/strains` - Alle Strains auflisten
+- `DELETE /api/v1/cannabis/strains/:id` - Strain löschen
+- `GET /api/v1/cannabis/health` - Cannabis Service Health Check
+- `GET /api/v1/cannabis/stats` - Cannabis Knowledge Base Statistiken
+
 ## 🔧 Usage Examples
 
 ### Dokument hochladen
@@ -175,6 +189,151 @@ curl -X POST "http://localhost:3000/api/v1/query/similar" \
     "minScore": 0.6
   }'
 ```
+
+### Cannabis Strain hinzufügen 🌿
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/cannabis/strains" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Blue Dream",
+    "type": "hybrid",
+    "description": "A balanced hybrid strain known for its sweet berry aroma and relaxing effects",
+    "thc": 18.5,
+    "cbd": 0.1,
+    "effects": ["happy", "relaxed", "euphoric", "creative"],
+    "flavors": ["berry", "sweet", "vanilla"],
+    "medical": ["stress", "depression", "pain"],
+    "terpenes": [
+      {"name": "Myrcene", "percentage": 0.8},
+      {"name": "Limonene", "percentage": 0.6}
+    ],
+    "genetics": "Blueberry x Haze",
+    "breeder": "DJ Short",
+    "rating": 4.2
+  }'
+```
+
+### Mood-basierte Strain-Empfehlungen
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/cannabis/recommendations" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "moodDescription": "I feel stressed after a long day at work and want to relax while watching Netflix",
+    "timeOfDay": "evening",
+    "activityContext": "relaxation",
+    "targetSymptoms": ["stress", "anxiety"],
+    "stressLevel": 8,
+    "energyLevel": 3,
+    "maxResults": 5,
+    "minScore": 0.7
+  }'
+```
+
+### Alle Cannabis Strains auflisten
+
+```bash
+curl -X GET "http://localhost:3000/api/v1/cannabis/strains" \
+  -H "Content-Type: application/json"
+```
+
+### Cannabis Service Health Check
+
+```bash
+curl -X GET "http://localhost:3000/api/v1/cannabis/health" \
+  -H "Content-Type: application/json"
+```
+
+### Cannabis Strain löschen
+
+```bash
+curl -X DELETE "http://localhost:3000/api/v1/cannabis/strains/strain-uuid-123" \
+  -H "Content-Type: application/json"
+```
+
+### Cannabis Knowledge Base Statistiken
+
+```bash
+curl -X GET "http://localhost:3000/api/v1/cannabis/stats" \
+  -H "Content-Type: application/json"
+```
+
+---
+
+## 🧠 Cognee Knowledge Graph API
+
+Das Cognee-Modul bietet erweiterte Knowledge-Graph-Funktionalitäten zur semantischen Datenverarbeitung und -analyse.
+
+### Textdaten zu Cognee hochladen
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/cognee/upload/data" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "Cannabis ist eine vielseitige Pflanze mit verschiedenen medizinischen Anwendungen. THC und CBD sind die wichtigsten Cannabinoide.",
+    "dataType": "text",
+    "title": "Cannabis Grundlagen",
+    "processingMode": "full",
+    "metadata": {
+      "source": "research_document",
+      "tags": ["cannabis", "medizin", "forschung"],
+      "author": "Dr. Cannabis",
+      "createdAt": "2025-09-11"
+    },
+    "createRelationships": true,
+    "extractEntities": true
+  }'
+```
+
+### Textdatei zu Cognee hochladen
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/cognee/upload/file" \
+  -F "file=@cannabis_research.txt" \
+  -F "author=Prof. Dr. Cannabis Forscher" \
+  -F "tags=medizin,cannabis,forschung,wissenschaft"
+```
+
+### Cognee Knowledge Graph abfragen
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/cognee/query" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Finde alle Informationen über THC und CBD Wirkmechanismen",
+    "limit": 10
+  }'
+```
+
+### Entitäten im Knowledge Graph suchen
+
+```bash
+curl -X GET "http://localhost:3000/api/v1/cognee/search?term=cannabis&type=Substance&limit=20" \
+  -H "Content-Type: application/json"
+```
+
+### Cognee Service Health Check
+
+```bash
+curl -X GET "http://localhost:3000/api/v1/cognee/health" \
+  -H "Content-Type: application/json"
+```
+
+### Cognee Knowledge Graph Statistiken
+
+```bash
+curl -X GET "http://localhost:3000/api/v1/cognee/stats" \
+  -H "Content-Type: application/json"
+```
+
+### Unterstützte Dateiformate für Upload:
+
+- **Text-Dateien:** `.txt`, `.csv`, `.json`, `.md`, `.rtf`
+- **Maximale Dateigröße:** 10MB
+- **Verarbeitung:** Automatische Entitäts-Extraktion und Relationship-Mapping
+
+---
 
 ## 🧪 Testing
 

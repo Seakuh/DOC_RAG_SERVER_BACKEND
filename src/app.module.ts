@@ -9,6 +9,8 @@ import { EmbeddingsModule } from './embeddings/embeddings.module';
 import { LLMModule } from './llm/llm.module';
 import { DocumentsModule } from './documents/documents.module';
 import { QueryModule } from './query/query.module';
+import { CannabisModule } from './cannabis/cannabis.module';
+import { CogneeModule } from './cognee/cognee.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -44,6 +46,8 @@ import { AppService } from './app.service';
     LLMModule,
     DocumentsModule,
     QueryModule,
+    CannabisModule,
+    CogneeModule,
   ],
   controllers: [AppController],
   providers: [
