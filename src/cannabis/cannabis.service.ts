@@ -1,15 +1,19 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
-import { CreateStrainDto, StrainType } from './dto/create-strain.dto';
-import { MoodRecommendationDto, TimeOfDay, ActivityContext } from './dto/mood-recommendation.dto';
-import { StrainRecommendationResponseDto, StrainMatch, RecommendationContext } from './dto/strain-recommendation.dto';
-import { PineconeService } from '../pinecone/pinecone.service';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { v4 as uuidv4 } from 'uuid';
+import { CogneeService } from '../cognee/cognee.service';
+import { CogneeDataType, UploadDataDto } from '../cognee/dto/upload-data.dto';
 import { EmbeddingsService } from '../embeddings/embeddings.service';
 import { LLMService } from '../llm/llm.service';
-import { CogneeService } from '../cognee/cognee.service';
-import { ScientificQuestionDto, ScientificAnswerDto } from './dto/scientific-question.dto';
+import { PineconeService } from '../pinecone/pinecone.service';
+import { CreateStrainDto, StrainType } from './dto/create-strain.dto';
+import { ActivityContext, MoodRecommendationDto, TimeOfDay } from './dto/mood-recommendation.dto';
 import { ProcessStrainTextDto, ProcessedStrainResponseDto } from './dto/process-strain-text.dto';
-import { UploadDataDto, CogneeDataType } from '../cognee/dto/upload-data.dto';
-import { v4 as uuidv4 } from 'uuid';
+import { ScientificAnswerDto, ScientificQuestionDto } from './dto/scientific-question.dto';
+import {
+  RecommendationContext,
+  StrainMatch,
+  StrainRecommendationResponseDto,
+} from './dto/strain-recommendation.dto';
 
 interface StrainMetadata {
   strainId: string;
@@ -45,13 +49,13 @@ export class CannabisService {
   async addStrain(createStrainDto: CreateStrainDto): Promise<{ id: string; message: string }> {
     try {
       const strainId = uuidv4();
-      
+
       // Create comprehensive text for embedding
       const strainText = this.createStrainEmbeddingText(createStrainDto);
-      
+
       // Generate embedding for the strain
       const embedding = await this.embeddingsService.generateEmbedding(strainText);
-      
+
       // Prepare metadata
       const metadata: StrainMetadata = {
         strainId,
@@ -71,20 +75,22 @@ export class CannabisService {
       };
 
       // Store in Pinecone - adapt metadata to PineconeService format
-      await this.pineconeService.upsert([{
-        id: strainId,
-        values: embedding,
-        metadata: { 
-          ...metadata, 
-          text: strainText,
-          source: `cannabis-strain-${createStrainDto.name}`,
-          chunk_index: 0,
-          timestamp: new Date().toISOString()
-        }
-      }]);
+      await this.pineconeService.upsert([
+        {
+          id: strainId,
+          values: embedding,
+          metadata: {
+            ...metadata,
+            text: strainText,
+            source: `cannabis-strain-${createStrainDto.name}`,
+            chunk_index: 0,
+            timestamp: new Date().toISOString(),
+          },
+        },
+      ]);
 
       this.logger.log(`Successfully added strain: ${createStrainDto.name} (ID: ${strainId})`);
-      
+
       return {
         id: strainId,
         message: `Cannabis strain "${createStrainDto.name}" has been successfully added to the knowledge base.`,
@@ -98,36 +104,47 @@ export class CannabisService {
   /**
    * Get strain recommendations based on mood and context
    */
-  async getMoodBasedRecommendations(moodRequest: MoodRecommendationDto): Promise<StrainRecommendationResponseDto> {
+  async getMoodBasedRecommendations(
+    moodRequest: MoodRecommendationDto,
+  ): Promise<StrainRecommendationResponseDto> {
     try {
       // Analyze the mood description with AI
       const analyzedMood = await this.analyzeMoodWithAI(moodRequest);
-      
+
       // Create enhanced search query
       const searchQuery = this.createEnhancedSearchQuery(moodRequest, analyzedMood);
-      
+
       // Generate embedding for the search query
       const queryEmbedding = await this.embeddingsService.generateEmbedding(searchQuery);
-      
+
       // Search for similar strains in Pinecone
       const searchResults = await this.pineconeService.query(
         queryEmbedding,
-        moodRequest.maxResults || 5
+        moodRequest.maxResults || 5,
       );
+      console.log('searchResults', searchResults);
 
       // Filter by score
-      const filteredResults = searchResults.filter(result => result.score >= (moodRequest.minScore || 0.7));
+      const filteredResults = searchResults.filter(
+        result => result.score >= (moodRequest.minScore || 0.7),
+      );
 
       if (filteredResults.length === 0) {
-        throw new NotFoundException('No suitable strain recommendations found for your mood profile');
+        throw new NotFoundException(
+          'No suitable strain recommendations found for your mood profile',
+        );
       }
 
       // Process results and generate recommendations
-      const recommendations = await this.processSearchResults(filteredResults, moodRequest, analyzedMood);
-      
+      const recommendations = await this.processSearchResults(
+        filteredResults,
+        moodRequest,
+        analyzedMood,
+      );
+
       // Create context explanation
       const context = this.createRecommendationContext(moodRequest, analyzedMood);
-      
+
       return {
         recommendations,
         context,
@@ -149,15 +166,17 @@ export class CannabisService {
       // Note: Pinecone doesn't have a direct "list all vectors" API in the current service
       // In a real implementation, you would maintain a separate metadata store
       // or use Pinecone's vector querying with pagination
-      
+
       this.logger.log('Getting strain statistics instead of full list (Pinecone limitation)');
       const stats = await this.pineconeService.getStats();
-      
-      return [{
-        message: 'Full strain listing not available with current Pinecone setup',
-        totalVectors: stats.totalVectorCount || 0,
-        recommendation: 'Use specific strain queries or mood-based recommendations instead'
-      }];
+
+      return [
+        {
+          message: 'Full strain listing not available with current Pinecone setup',
+          totalVectors: stats.totalVectorCount || 0,
+          recommendation: 'Use specific strain queries or mood-based recommendations instead',
+        },
+      ];
     } catch (error) {
       this.logger.error(`Failed to retrieve strain information: ${error.message}`, error.stack);
       throw new BadRequestException(`Failed to retrieve strain information: ${error.message}`);
@@ -171,7 +190,7 @@ export class CannabisService {
     try {
       await this.pineconeService.deleteById(strainId);
       this.logger.log(`Successfully deleted strain with ID: ${strainId}`);
-      
+
       return {
         message: `Strain with ID ${strainId} has been successfully deleted.`,
       };
@@ -269,16 +288,16 @@ export class CannabisService {
   private async processSearchResults(
     searchResults: any[],
     moodRequest: MoodRecommendationDto,
-    analyzedMood: any
+    analyzedMood: any,
   ): Promise<StrainMatch[]> {
     const recommendations: StrainMatch[] = [];
 
     for (const result of searchResults) {
       const metadata = result.metadata as StrainMetadata;
-      
+
       // Generate AI reasoning for this recommendation
       const reasoning = await this.generateReasoningForStrain(metadata, moodRequest, analyzedMood);
-      
+
       // Generate dosage recommendation
       const dosageRecommendation = this.generateDosageRecommendation(metadata, moodRequest);
 
@@ -309,7 +328,7 @@ export class CannabisService {
   private async generateReasoningForStrain(
     strain: StrainMetadata,
     moodRequest: MoodRecommendationDto,
-    analyzedMood: any
+    analyzedMood: any,
   ): Promise<string> {
     const prompt = `
     Explain why "${strain.name}" is a good match for this user's mood:
@@ -341,9 +360,13 @@ export class CannabisService {
   /**
    * Generate dosage recommendation based on strain and user context
    */
-  private generateDosageRecommendation(strain: StrainMetadata, moodRequest: MoodRecommendationDto): string {
+  private generateDosageRecommendation(
+    strain: StrainMetadata,
+    moodRequest: MoodRecommendationDto,
+  ): string {
     const highTHC = strain.thc && strain.thc > 20;
-    const eveningUse = moodRequest.timeOfDay === TimeOfDay.EVENING || moodRequest.timeOfDay === TimeOfDay.NIGHT;
+    const eveningUse =
+      moodRequest.timeOfDay === TimeOfDay.EVENING || moodRequest.timeOfDay === TimeOfDay.NIGHT;
     const newUser = moodRequest.stressLevel && moodRequest.stressLevel > 7; // High stress might indicate inexperience
 
     if (highTHC && newUser) {
@@ -358,7 +381,10 @@ export class CannabisService {
   /**
    * Create recommendation context explanation
    */
-  private createRecommendationContext(moodRequest: MoodRecommendationDto, analyzedMood: any): RecommendationContext {
+  private createRecommendationContext(
+    moodRequest: MoodRecommendationDto,
+    analyzedMood: any,
+  ): RecommendationContext {
     return {
       analyzedMood: analyzedMood.mainMood || moodRequest.moodDescription.substring(0, 100),
       extractedKeywords: analyzedMood.keywords || this.extractKeywordsFromMood(moodRequest),
@@ -373,15 +399,17 @@ export class CannabisService {
    */
   private extractKeywordsFromMood(moodRequest: MoodRecommendationDto): string[] {
     const keywords = [];
-    
-    if (moodRequest.moodDescription.toLowerCase().includes('stress')) keywords.push('stress-relief');
+
+    if (moodRequest.moodDescription.toLowerCase().includes('stress'))
+      keywords.push('stress-relief');
     if (moodRequest.moodDescription.toLowerCase().includes('relax')) keywords.push('relaxation');
     if (moodRequest.moodDescription.toLowerCase().includes('creative')) keywords.push('creativity');
     if (moodRequest.moodDescription.toLowerCase().includes('energy')) keywords.push('energizing');
     if (moodRequest.moodDescription.toLowerCase().includes('sleep')) keywords.push('sleep-aid');
     if (moodRequest.timeOfDay === TimeOfDay.EVENING) keywords.push('evening-use');
-    if (moodRequest.activityContext === ActivityContext.CREATIVE) keywords.push('creative-enhancement');
-    
+    if (moodRequest.activityContext === ActivityContext.CREATIVE)
+      keywords.push('creative-enhancement');
+
     return keywords;
   }
 
@@ -390,7 +418,7 @@ export class CannabisService {
    */
   private getRecommendedCharacteristics(moodRequest: MoodRecommendationDto): string[] {
     const characteristics = [];
-    
+
     if (moodRequest.stressLevel && moodRequest.stressLevel > 6) {
       characteristics.push('high-myrcene', 'relaxing-effects');
     }
@@ -400,7 +428,7 @@ export class CannabisService {
     if (moodRequest.timeOfDay === TimeOfDay.EVENING) {
       characteristics.push('indica-dominant', 'sedating');
     }
-    
+
     return characteristics;
   }
 
@@ -428,23 +456,23 @@ export class CannabisService {
 
   /**
    * Process cannabis strain text and extract structured data using AI
+   * Stores only in Cognee knowledge graph
    */
-  async processStrainFromText(processTextDto: ProcessStrainTextDto): Promise<ProcessedStrainResponseDto> {
+  async processStrainFromText(
+    processTextDto: ProcessStrainTextDto,
+  ): Promise<ProcessedStrainResponseDto> {
     try {
       const startTime = Date.now();
       const strainId = uuidv4();
-      
+
       this.logger.log(`Processing strain text: "${processTextDto.text.substring(0, 100)}..."`);
 
       // Step 1: Extract structured strain data using LLM
       const extractedStrain = await this.extractStrainDataFromText(processTextDto);
-      
-      // Step 2: Store in Cognee knowledge graph
+
+      // Step 2: Store only in Cognee knowledge graph
       const cogneeResult = await this.storeStrainInCognee(extractedStrain, processTextDto.text);
-      
-      // Step 3: Store in Pinecone vector database for recommendations
-      const pineconeResult = await this.storeStrainInPinecone(extractedStrain, strainId);
-      
+
       const processingTime = Date.now() - startTime;
 
       return {
@@ -467,12 +495,440 @@ export class CannabisService {
           extractedEntities: cogneeResult.entitiesCount || 0,
           identifiedRelationships: cogneeResult.relationshipsCount || 0,
           originalTextLength: processTextDto.text.length,
-          timestamp: new Date().toISOString()
-        }
+          timestamp: new Date().toISOString(),
+        },
       };
     } catch (error) {
       this.logger.error(`Failed to process strain text: ${error.message}`, error.stack);
       throw new BadRequestException(`Failed to process strain text: ${error.message}`);
+    }
+  }
+
+  /**
+   * Find similar strains based on vector similarity
+   */
+  async findSimilarStrains(strainId: string, limit: number = 5): Promise<any[]> {
+    // TODO: Implement this
+    return [];
+    // try {
+    //   this.logger.log(`Finding similar strains for: ${strainId}`);
+
+    //   // Get the reference strain's vector from Pinecone
+    //   const referenceVector = await this.getReferenceVector(strainId);
+    //   if (!referenceVector) {
+    //     throw new NotFoundException(`Strain with ID ${strainId} not found`);
+    //   }
+
+    //   // Search for similar strains using the reference vector
+    //   const similarResults = await this.pineconeService.query(
+    //     referenceVector,
+    //     limit + 1 // +1 to exclude the reference strain itself
+    //   );
+
+    //   // Filter out the reference strain and format results
+    //   const similarStrains = similarResults
+    //     .filter(result => result.metadata?.strainId !== strainId)
+    //     .slice(0, limit)
+    //     .map(result => {
+    //       const metadata = result.metadata as StrainMetadata;
+    //       return {
+    //         id: metadata.strainId,
+    //         name: metadata.name,
+    //         type: metadata.type,
+    //         description: metadata.description,
+    //         thc: metadata.thc,
+    //         cbd: metadata.cbd,
+    //         effects: metadata.effects,
+    //         flavors: metadata.flavors,
+    //         medical: metadata.medical,
+    //         terpenes: metadata.terpenes ? JSON.parse(metadata.terpenes) : null,
+    //         genetics: metadata.genetics,
+    //         breeder: metadata.breeder,
+    //         rating: metadata.rating,
+    //         similarity: Math.round(result.score * 100) / 100, // Round to 2 decimal places
+    //         createdAt: metadata.createdAt
+    //       };
+    //     });
+
+    //   this.logger.log(`Found ${similarStrains.length} similar strains`);
+    //   return similarStrains;
+    // } catch (error) {
+    //   this.logger.error(`Failed to find similar strains: ${error.message}`, error.stack);
+    //   throw new BadRequestException(`Failed to find similar strains: ${error.message}`);
+    // }
+  }
+
+  /**
+   * Get reference vector for a strain by ID
+   */
+  private async getReferenceVector(strainId: string): Promise<number[] | null> {
+    try {
+      // Query Pinecone to find the strain by ID
+      const results = await this.pineconeService.query(
+        new Array(1024).fill(0), // Dummy vector for metadata search
+        1,
+        { strainId: strainId },
+      );
+
+      if (results.length === 0) {
+        return null;
+      }
+
+      // Since Pinecone doesn't return vectors in query results,
+      // we need to use the strain's text to generate the embedding again
+      const metadata = results[0].metadata as unknown as StrainMetadata;
+      const strainText = this.createStrainEmbeddingTextFromMetadata(metadata);
+
+      return await this.embeddingsService.generateEmbedding(strainText);
+    } catch (error) {
+      this.logger.warn(`Could not get reference vector for ${strainId}: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Create embedding text from strain metadata
+   */
+  private createStrainEmbeddingTextFromMetadata(metadata: StrainMetadata): string {
+    const parts = [
+      `Cannabis strain: ${metadata.name}`,
+      `Type: ${metadata.type}`,
+      `Description: ${metadata.description}`,
+      `Effects: ${metadata.effects?.join(', ') || 'various effects'}`,
+    ];
+
+    if (metadata.thc) parts.push(`THC: ${metadata.thc}%`);
+    if (metadata.cbd) parts.push(`CBD: ${metadata.cbd}%`);
+    if (metadata.flavors?.length) parts.push(`Flavors: ${metadata.flavors.join(', ')}`);
+    if (metadata.medical?.length) parts.push(`Medical uses: ${metadata.medical.join(', ')}`);
+    if (metadata.terpenes) {
+      try {
+        const terpenes = JSON.parse(metadata.terpenes);
+        if (Array.isArray(terpenes)) {
+          const terpeneNames = terpenes.map((t: any) => `${t.name} (${t.percentage}%)`);
+          parts.push(`Terpenes: ${terpeneNames.join(', ')}`);
+        }
+      } catch (e) {
+        // Ignore terpene parsing errors
+      }
+    }
+    if (metadata.genetics) parts.push(`Genetics: ${metadata.genetics}`);
+
+    return parts.join('. ');
+  }
+
+  /**
+   * Get strain recommendations with AI-generated recommendation text based on mood
+   */
+  async getStrainRecommendationsWithText(moodRequest: { moodDescription: string; maxResults?: number }): Promise<any> {
+    try {
+      const startTime = Date.now();
+      this.logger.log(`Generating strain recommendations with AI text for mood: "${moodRequest.moodDescription.substring(0, 50)}..."`);
+
+      // Analyze the mood description with AI first
+      const moodAnalysis = await this.analyzeMoodForStrainRecommendation(moodRequest.moodDescription);
+
+      // Create enhanced search query based on mood
+      const searchQuery = this.createMoodBasedSearchQuery(moodRequest.moodDescription, moodAnalysis);
+
+      // Generate embedding for the mood-based search query
+      const queryEmbedding = await this.embeddingsService.generateEmbedding(searchQuery);
+
+      // Query Pinecone for strain recommendations
+      const maxResults = moodRequest.maxResults || 5;
+      const searchResults = await this.pineconeService.query(queryEmbedding, maxResults);
+
+      if (searchResults.length === 0) {
+        return {
+          moodAnalysis,
+          strains: [],
+          totalResults: 0,
+          processingTime: Date.now() - startTime,
+          generatedAt: new Date().toISOString(),
+          message: 'Keine passenden Strains für deine Stimmung gefunden',
+        };
+      }
+
+      // Process each strain and generate personalized recommendation text
+      const strainsWithRecommendations = await Promise.all(
+        searchResults.map(async result => {
+          const metadata = result.metadata as unknown as StrainMetadata;
+
+          // Generate personalized AI recommendation text for this strain based on mood
+          const recommendationText = await this.generateMoodBasedRecommendationText(metadata, moodRequest.moodDescription, moodAnalysis);
+
+          // Generate match reason
+          const matchReason = await this.generateMatchReason(metadata, moodAnalysis);
+
+          return {
+            id: metadata.strainId,
+            name: metadata.name,
+            type: metadata.type,
+            description: metadata.description,
+            thc: metadata.thc,
+            cbd: metadata.cbd,
+            effects: metadata.effects,
+            flavors: metadata.flavors,
+            medical: metadata.medical,
+            terpenes: metadata.terpenes ? JSON.parse(metadata.terpenes) : null,
+            genetics: metadata.genetics,
+            rating: metadata.rating,
+            recommendationText,
+            similarity: Math.round(result.score * 100) / 100,
+            matchReason,
+            createdAt: metadata.createdAt,
+          };
+        }),
+      );
+
+      const processingTime = Date.now() - startTime;
+
+      return {
+        moodAnalysis,
+        strains: strainsWithRecommendations,
+        totalResults: strainsWithRecommendations.length,
+        processingTime,
+        generatedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      this.logger.error(`Failed to generate strain recommendations: ${error.message}`, error.stack);
+      throw new BadRequestException(`Failed to generate strain recommendations: ${error.message}`);
+    }
+  }
+
+  /**
+   * Analyze mood description for strain recommendation
+   */
+  private async analyzeMoodForStrainRecommendation(moodDescription: string): Promise<any> {
+    const prompt = `
+Analysiere diese Stimmungsbeschreibung für Cannabis-Strain-Empfehlungen:
+
+Stimmung: "${moodDescription}"
+
+Extrahiere und gib als JSON zurück:
+{
+  "detectedMood": "kurze Zusammenfassung der Hauptstimmung",
+  "recommendedEffects": ["array", "von", "gewünschten", "effekten"],
+  "timeContext": "vermutete Tageszeit oder Situation",
+  "intensity": "low|medium|high - Intensität der gewünschten Wirkung",
+  "strainType": "indica|sativa|hybrid - empfohlener Strain-Typ",
+  "keywords": ["relevante", "suchbegriffe", "für", "strain", "matching"]
+}
+
+Fokus auf Cannabis-spezifische Effekte: relaxed, happy, euphoric, creative, focused, energetic, sleepy, uplifted, calm, giggly.
+`;
+
+    try {
+      const response = await this.llmService.generateResponse(prompt, []);
+      return JSON.parse(response.answer);
+    } catch (error) {
+      this.logger.warn(`Could not analyze mood with AI, using fallback: ${error.message}`);
+
+      // Fallback mood analysis
+      const moodLower = moodDescription.toLowerCase();
+      return {
+        detectedMood: moodDescription.substring(0, 100),
+        recommendedEffects: this.extractEffectsFromMoodText(moodLower),
+        timeContext: this.extractTimeContext(moodLower),
+        intensity: moodLower.includes('sehr') || moodLower.includes('stark') ? 'high' : 'medium',
+        strainType: this.determineStrainTypeFromMood(moodLower),
+        keywords: this.extractKeywordsFromMoodText(moodLower)
+      };
+    }
+  }
+
+  /**
+   * Create mood-based search query for Pinecone
+   */
+  private createMoodBasedSearchQuery(moodDescription: string, moodAnalysis: any): string {
+    const parts = [
+      `User mood: ${moodDescription}`,
+      `Desired effects: ${moodAnalysis.recommendedEffects?.join(', ') || 'relaxation'}`,
+      `Strain type preference: ${moodAnalysis.strainType || 'hybrid'}`,
+      `Context: ${moodAnalysis.timeContext || 'general use'}`,
+      `Keywords: ${moodAnalysis.keywords?.join(', ') || 'cannabis strain'}`
+    ];
+
+    return parts.join('. ');
+  }
+
+  /**
+   * Generate mood-based recommendation text for a specific strain
+   */
+  private async generateMoodBasedRecommendationText(
+    strain: StrainMetadata,
+    moodDescription: string,
+    moodAnalysis: any
+  ): Promise<string> {
+    const prompt = `
+Du bist ein Cannabis-Experte. Schreibe einen personalisierten Empfehlungstext für den Strain "${strain.name}" basierend auf der Nutzerstimmung.
+
+Nutzerstimmung: "${moodDescription}"
+Stimmungsanalyse: ${JSON.stringify(moodAnalysis, null, 2)}
+
+Strain-Informationen:
+- Name: ${strain.name}
+- Typ: ${strain.type}
+- THC: ${strain.thc || 'unbekannt'}%
+- CBD: ${strain.cbd || 'unbekannt'}%
+- Effekte: ${strain.effects?.join(', ') || 'verschiedene Effekte'}
+- Medizinische Anwendungen: ${strain.medical?.join(', ') || 'nicht spezifiziert'}
+
+Schreibe einen persönlichen, empathischen Empfehlungstext (2-3 Sätze), der:
+1. Direkt auf die Stimmung des Nutzers eingeht
+2. Erklärt, warum dieser Strain zur Stimmung passt
+3. Die zu erwartenden Effekte beschreibt
+4. Einen freundlichen, verständnisvollen Ton hat
+
+Beginne mit "Für deine aktuelle Situation..." oder ähnlich persönlich.
+`;
+
+    try {
+      const response = await this.llmService.generateResponse(prompt, []);
+      return response.answer;
+    } catch (error) {
+      this.logger.warn(`Could not generate mood-based recommendation text for ${strain.name}, using fallback`);
+
+      // Fallback recommendation text
+      const moodContext = moodAnalysis.detectedMood || 'deine Stimmung';
+      const effectsMatch = strain.effects?.filter(effect =>
+        moodAnalysis.recommendedEffects?.includes(effect)
+      ) || [];
+
+      return `Für ${moodContext} ist ${strain.name} eine ausgezeichnete Wahl. ${effectsMatch.length > 0 ? `Mit Effekten wie ${effectsMatch.join(', ')} ` : ''}Dieser ${strain.type}-Strain ${strain.thc ? `mit ${strain.thc}% THC ` : ''}kann dir dabei helfen, dich ${moodAnalysis.recommendedEffects?.[0] || 'entspannt'} zu fühlen.`;
+    }
+  }
+
+  /**
+   * Generate match reason for strain recommendation
+   */
+  private async generateMatchReason(strain: StrainMetadata, moodAnalysis: any): Promise<string> {
+    const effectsMatch = strain.effects?.filter(effect =>
+      moodAnalysis.recommendedEffects?.includes(effect)
+    ) || [];
+
+    if (effectsMatch.length > 0) {
+      return `Perfekt für ${moodAnalysis.detectedMood} - bietet ${effectsMatch.join(', ')}`;
+    }
+
+    const typeMatch = strain.type === moodAnalysis.strainType;
+    if (typeMatch) {
+      return `${strain.type.charAt(0).toUpperCase() + strain.type.slice(1)}-Strain passt zu deiner gewünschten Wirkung`;
+    }
+
+    return `Empfohlen aufgrund der Strain-Eigenschaften und Ähnlichkeit zu deiner Stimmung`;
+  }
+
+  // Helper methods for fallback mood analysis
+  private extractEffectsFromMoodText(moodText: string): string[] {
+    const effectsMap = {
+      'stress': ['relaxed', 'calm'],
+      'müde': ['energetic', 'uplifted'],
+      'traurig': ['happy', 'euphoric'],
+      'kreativ': ['creative', 'focused'],
+      'schlafen': ['sleepy', 'relaxed'],
+      'energie': ['energetic', 'uplifted'],
+      'entspann': ['relaxed', 'calm'],
+      'fröhlich': ['happy', 'giggly'],
+      'fokus': ['focused', 'creative']
+    };
+
+    const effects = [];
+    for (const [keyword, mappedEffects] of Object.entries(effectsMap)) {
+      if (moodText.includes(keyword)) {
+        effects.push(...mappedEffects);
+      }
+    }
+
+    return effects.length > 0 ? [...new Set(effects)] : ['relaxed', 'happy'];
+  }
+
+  private extractTimeContext(moodText: string): string {
+    if (moodText.includes('abend') || moodText.includes('nacht')) return 'Abend';
+    if (moodText.includes('morgen') || moodText.includes('früh')) return 'Morgen';
+    if (moodText.includes('arbeit') || moodText.includes('job')) return 'nach der Arbeit';
+    if (moodText.includes('wochenende') || moodText.includes('freizeit')) return 'Freizeit';
+    return 'allgemeine Nutzung';
+  }
+
+  private determineStrainTypeFromMood(moodText: string): string {
+    if (moodText.includes('entspann') || moodText.includes('schlafen') || moodText.includes('stress')) {
+      return 'indica';
+    }
+    if (moodText.includes('energie') || moodText.includes('kreativ') || moodText.includes('fokus')) {
+      return 'sativa';
+    }
+    return 'hybrid';
+  }
+
+  private extractKeywordsFromMoodText(moodText: string): string[] {
+    const keywords = [];
+    const keywordMap = {
+      'stress': 'stress-relief',
+      'entspann': 'relaxation',
+      'kreativ': 'creative',
+      'energie': 'energizing',
+      'schmerz': 'pain-relief',
+      'schlaf': 'sleep-aid',
+      'angst': 'anxiety-relief'
+    };
+
+    for (const [word, keyword] of Object.entries(keywordMap)) {
+      if (moodText.includes(word)) {
+        keywords.push(keyword);
+      }
+    }
+
+    return keywords.length > 0 ? keywords : ['cannabis', 'strain'];
+  }
+
+  /**
+   * Generate AI-powered recommendation text for a specific strain
+   */
+  private async generateRecommendationText(strain: StrainMetadata): Promise<string> {
+    const prompt = `
+Du bist ein Cannabis-Experte und Berater. Schreibe einen personalisierten Empfehlungstext für den Cannabis-Strain "${strain.name}".
+
+Strain-Informationen:
+- Name: ${strain.name}
+- Typ: ${strain.type}
+- Beschreibung: ${strain.description}
+- THC: ${strain.thc || 'unbekannt'}%
+- CBD: ${strain.cbd || 'unbekannt'}%
+- Effekte: ${strain.effects?.join(', ') || 'verschiedene Effekte'}
+- Geschmäcker: ${strain.flavors?.join(', ') || 'nicht spezifiziert'}
+- Medizinische Anwendungen: ${strain.medical?.join(', ') || 'nicht spezifiziert'}
+- Genetik: ${strain.genetics || 'nicht spezifiziert'}
+
+Schreibe einen informativen, aber freundlichen Empfehlungstext (ca. 2-3 Sätze), der:
+1. Die wichtigsten Eigenschaften des Strains hervorhebt
+2. Erklärt, für welche Situationen/Zeiten er geeignet ist
+3. Die Effekte und Vorteile beschreibt
+4. Auf Deutsch verfasst ist
+
+Der Text soll professionell aber zugänglich sein, als würdest du einem Freund eine Empfehlung geben.
+    `;
+
+    try {
+      const response = await this.llmService.generateResponse(prompt, []);
+      return response.answer;
+    } catch (error) {
+      this.logger.warn(
+        `Could not generate AI recommendation text for ${strain.name}, using fallback`,
+      );
+
+      // Fallback recommendation text
+      const effectsText = strain.effects?.length
+        ? strain.effects.join(', ')
+        : 'verschiedene positive Effekte';
+      const typeDescription =
+        strain.type === 'indica'
+          ? 'entspannende Indica-Eigenschaften'
+          : strain.type === 'sativa'
+            ? 'energetisierende Sativa-Eigenschaften'
+            : 'ausgewogene Hybrid-Eigenschaften';
+
+      return `${strain.name} ist ein ${strain.type}-Strain mit ${typeDescription}. Mit Effekten wie ${effectsText} ist er ideal für ${strain.type === 'indica' ? 'entspannte Abende und Erholung' : strain.type === 'sativa' ? 'aktive Tageszeiten und kreative Projekte' : 'vielseitige Anwendungen'}. ${strain.thc ? `Mit ${strain.thc}% THC` : 'Dieser Strain'} bietet eine ausgewogene Erfahrung für Cannabis-Enthusiasten.`;
     }
   }
 
@@ -482,12 +938,14 @@ export class CannabisService {
   async answerScientificQuestion(questionDto: ScientificQuestionDto): Promise<ScientificAnswerDto> {
     try {
       const startTime = Date.now();
-      this.logger.log(`Processing scientific question: "${questionDto.question.substring(0, 100)}..."`);
+      this.logger.log(
+        `Processing scientific question: "${questionDto.question.substring(0, 100)}..."`,
+      );
 
       // Step 1: Query Cognee knowledge graph for relevant research
       const cogneeResults = await this.cogneeService.queryKnowledgeGraph(
         questionDto.question,
-        questionDto.maxSources || 5
+        questionDto.maxSources || 5,
       );
 
       // Step 2: Search our strain database for relevant information
@@ -497,7 +955,7 @@ export class CannabisService {
       const scientificAnswer = await this.generateScientificAnswer(
         questionDto,
         cogneeResults,
-        strainContext
+        strainContext,
       );
 
       // Step 4: Extract and format sources
@@ -510,13 +968,13 @@ export class CannabisService {
       const insights = await this.generateScientificInsights(
         questionDto.question,
         scientificAnswer,
-        cogneeResults
+        cogneeResults,
       );
 
       // Step 7: Find related strains based on scientific findings
       const relatedStrains = await this.findScientificallyRelatedStrains(
         questionDto.question,
-        scientificAnswer
+        scientificAnswer,
       );
 
       const processingTime = Date.now() - startTime;
@@ -532,10 +990,9 @@ export class CannabisService {
           processingTime,
           sourcesAnalyzed: cogneeResults.results.length,
           cogneeEntitiesFound: relatedEntities.length,
-          timestamp: new Date().toISOString()
-        }
+          timestamp: new Date().toISOString(),
+        },
       };
-
     } catch (error) {
       this.logger.error(`Failed to answer scientific question: ${error.message}`, error.stack);
       throw new BadRequestException(`Failed to process scientific question: ${error.message}`);
@@ -549,10 +1006,10 @@ export class CannabisService {
     try {
       // Generate embedding for the question
       const questionEmbedding = await this.embeddingsService.generateEmbedding(question);
-      
+
       // Search in our strain database
       const strainResults = await this.pineconeService.query(questionEmbedding, 3);
-      
+
       return strainResults.filter(result => result.score >= 0.7);
     } catch (error) {
       this.logger.warn(`Could not get strain context: ${error.message}`);
@@ -566,7 +1023,7 @@ export class CannabisService {
   private async generateScientificAnswer(
     questionDto: ScientificQuestionDto,
     cogneeResults: any,
-    strainContext: any[]
+    strainContext: any[],
   ): Promise<string> {
     const prompt = `
 Du bist ein Cannabis-Experte und Forscher. Beantworte die folgende wissenschaftliche Frage basierend auf den verfügbaren Forschungsdaten und Cannabis-Strain-Informationen.
@@ -608,7 +1065,7 @@ Gib eine umfassende, wissenschaftlich fundierte Antwort auf die Frage.
       keyFindings: this.extractKeyFindings(result),
       authors: result.properties?.authors || [],
       year: result.properties?.year || new Date().getFullYear(),
-      journal: result.properties?.journal || 'Cannabis Research Database'
+      journal: result.properties?.journal || 'Cannabis Research Database',
     }));
   }
 
@@ -622,7 +1079,7 @@ Gib eine umfassende, wissenschaftlich fundierte Antwort auf die Frage.
         name: entity.name,
         type: entity.type || 'Unknown',
         relationship: this.determineEntityRelationship(entity),
-        confidence: entity.properties?.confidence || 0.75
+        confidence: entity.properties?.confidence || 0.75,
       }))
       .slice(0, 10); // Limit to top 10 entities
   }
@@ -633,7 +1090,7 @@ Gib eine umfassende, wissenschaftlich fundierte Antwort auf die Frage.
   private async generateScientificInsights(
     question: string,
     answer: string,
-    cogneeResults: any
+    cogneeResults: any,
   ): Promise<any> {
     const insightPrompt = `
 Basierend auf der Frage "${question}" und der generierten Antwort, extrahiere strukturierte wissenschaftliche Erkenntnisse:
@@ -660,7 +1117,7 @@ Jeder Wert soll ein Array von strings sein.
         mechanismsOfAction: ['Endocannabinoid system interaction', 'CB1/CB2 receptor binding'],
         clinicalEvidence: ['Limited clinical trials available', 'Preclinical studies show promise'],
         contraindications: ['Consult healthcare provider', 'May interact with medications'],
-        futureResearch: ['More clinical trials needed', 'Long-term effects studies required']
+        futureResearch: ['More clinical trials needed', 'Long-term effects studies required'],
       };
     }
   }
@@ -670,22 +1127,22 @@ Jeder Wert soll ein Array von strings sein.
    */
   private async findScientificallyRelatedStrains(
     question: string,
-    scientificAnswer: string
+    scientificAnswer: string,
   ): Promise<any[]> {
     try {
       // Extract key terms from question and answer
       const combinedText = `${question} ${scientificAnswer}`;
       const embedding = await this.embeddingsService.generateEmbedding(combinedText);
-      
+
       // Search for related strains
       const strainResults = await this.pineconeService.query(embedding, 3);
-      
+
       return strainResults
         .filter(result => result.score >= 0.6)
         .map(result => ({
           name: (result.metadata as any)?.name || 'Unknown Strain',
           relevance: this.calculateStrainRelevance(result.score),
-          scientificBasis: this.generateScientificBasis(result.metadata, question)
+          scientificBasis: this.generateScientificBasis(result.metadata, question),
         }));
     } catch (error) {
       this.logger.warn(`Could not find related strains: ${error.message}`);
@@ -698,13 +1155,16 @@ Jeder Wert soll ein Array von strings sein.
    */
   private calculateScientificConfidence(cogneeResults: any, sources: any[]): number {
     if (!cogneeResults.results.length) return 0.3;
-    
-    const avgRelevance = cogneeResults.results.reduce((sum: number, result: any) => 
-      sum + (result.relevanceScore || 0.5), 0) / cogneeResults.results.length;
-    
+
+    const avgRelevance =
+      cogneeResults.results.reduce(
+        (sum: number, result: any) => sum + (result.relevanceScore || 0.5),
+        0,
+      ) / cogneeResults.results.length;
+
     const sourceQuality = sources.length > 0 ? 0.2 : 0;
     const baseConfidence = 0.6;
-    
+
     return Math.min(baseConfidence + avgRelevance * 0.3 + sourceQuality, 1.0);
   }
 
@@ -739,15 +1199,15 @@ Jeder Wert soll ein Array von strings sein.
   private generateScientificBasis(metadata: any, question: string): string {
     const effects = metadata?.effects || [];
     const medical = metadata?.medical || [];
-    
+
     if (effects.length > 0) {
       return `This strain's ${effects.join(', ')} effects are scientifically relevant to the question about ${question.substring(0, 50)}...`;
     }
-    
+
     if (medical.length > 0) {
       return `Medical applications including ${medical.join(', ')} provide scientific basis for relevance.`;
     }
-    
+
     return 'Scientific relevance based on cannabinoid profile and reported effects.';
   }
 
@@ -794,7 +1254,7 @@ Analysiere den Text sorgfältig und extrahiere die Daten:
     try {
       const response = await this.llmService.generateResponse(prompt, []);
       const extracted = JSON.parse(response.answer);
-      
+
       // Validation and fallbacks
       if (!extracted.name || !extracted.type || !extracted.effects?.length) {
         throw new Error('Missing required fields in extraction');
@@ -803,7 +1263,7 @@ Analysiere den Text sorgfältig und extrahiere die Daten:
       return extracted;
     } catch (error) {
       this.logger.warn(`LLM extraction failed, using fallback: ${error.message}`);
-      
+
       // Fallback extraction using simple text analysis
       return this.fallbackStrainExtraction(processTextDto);
     }
@@ -814,22 +1274,22 @@ Analysiere den Text sorgfältig und extrahiere die Daten:
    */
   private fallbackStrainExtraction(processTextDto: ProcessStrainTextDto): any {
     const text = processTextDto.text.toLowerCase();
-    
+
     // Extract name
     let name = processTextDto.strainNameHint || this.extractNameFromText(text) || 'Unknown Strain';
-    
+
     // Extract type
     let type = 'hybrid';
     if (text.includes('indica') && !text.includes('sativa')) type = 'indica';
     else if (text.includes('sativa') && !text.includes('indica')) type = 'sativa';
-    
+
     // Extract THC/CBD
     const thcMatch = text.match(/thc[\s:]*(\d+(?:\.\d+)?)/i);
     const cbdMatch = text.match(/cbd[\s:]*(\d+(?:\.\d+)?)/i);
-    
+
     // Extract basic effects
     const effects = this.extractEffectsFromText(text);
-    
+
     return {
       name,
       type,
@@ -842,7 +1302,7 @@ Analysiere den Text sorgfältig und extrahiere die Daten:
       terpenes: null,
       genetics: null,
       breeder: null,
-      confidence: 0.6
+      confidence: 0.6,
     };
   }
 
@@ -866,18 +1326,18 @@ Analysiere den Text sorgfältig und extrahiere die Daten:
             strainType: strainData.type,
             thc: strainData.thc,
             cbd: strainData.cbd,
-            effects: strainData.effects
-          }
-        }
+            effects: strainData.effects,
+          },
+        },
       };
 
       const result = await this.cogneeService.uploadData(uploadData);
-      
+
       return {
         success: true,
         id: result.id,
         entitiesCount: result.entitiesCount,
-        relationshipsCount: result.relationshipsCount
+        relationshipsCount: result.relationshipsCount,
       };
     } catch (error) {
       this.logger.error(`Failed to store in Cognee: ${error.message}`);
@@ -885,7 +1345,7 @@ Analysiere den Text sorgfältig und extrahiere die Daten:
         success: false,
         id: null,
         entitiesCount: 0,
-        relationshipsCount: 0
+        relationshipsCount: 0,
       };
     }
   }
@@ -897,10 +1357,10 @@ Analysiere den Text sorgfältig und extrahiere die Daten:
     try {
       // Create comprehensive text for embedding
       const embeddingText = this.createStrainEmbeddingTextFromExtracted(strainData);
-      
+
       // Generate embedding
       const embedding = await this.embeddingsService.generateEmbedding(embeddingText);
-      
+
       // Prepare metadata
       const metadata: StrainMetadata = {
         strainId,
@@ -920,17 +1380,19 @@ Analysiere den Text sorgfältig und extrahiere die Daten:
       };
 
       // Store in Pinecone
-      await this.pineconeService.upsert([{
-        id: strainId,
-        values: embedding,
-        metadata: { 
-          ...metadata, 
-          text: embeddingText,
-          source: `cannabis-strain-${strainData.name}`,
-          chunk_index: 0,
-          timestamp: new Date().toISOString()
-        }
-      }]);
+      await this.pineconeService.upsert([
+        {
+          id: strainId,
+          values: embedding,
+          metadata: {
+            ...metadata,
+            text: embeddingText,
+            source: `cannabis-strain-${strainData.name}`,
+            chunk_index: 0,
+            timestamp: new Date().toISOString(),
+          },
+        },
+      ]);
 
       return { success: true };
     } catch (error) {
@@ -970,7 +1432,7 @@ Analysiere den Text sorgfältig und extrahiere die Daten:
       /"([^"]+)"/,
       /'([^']+)'/,
       /strain[:\s]+([A-Z][A-Za-z\s]+)/i,
-      /called[:\s]+([A-Z][A-Za-z\s]+)/i
+      /called[:\s]+([A-Z][A-Za-z\s]+)/i,
     ];
 
     for (const pattern of patterns) {
@@ -984,19 +1446,40 @@ Analysiere den Text sorgfältig und extrahiere die Daten:
 
   private extractEffectsFromText(text: string): string[] {
     const commonEffects = [
-      'relaxed', 'happy', 'euphoric', 'uplifted', 'creative', 'focused', 
-      'energetic', 'calm', 'sleepy', 'giggly', 'hungry', 'talkative'
+      'relaxed',
+      'happy',
+      'euphoric',
+      'uplifted',
+      'creative',
+      'focused',
+      'energetic',
+      'calm',
+      'sleepy',
+      'giggly',
+      'hungry',
+      'talkative',
     ];
 
-    return commonEffects.filter(effect => 
-      text.includes(effect) || text.includes(effect.replace('ed', 'ing'))
+    return commonEffects.filter(
+      effect => text.includes(effect) || text.includes(effect.replace('ed', 'ing')),
     );
   }
 
   private extractFlavorsFromText(text: string): string[] | null {
     const commonFlavors = [
-      'sweet', 'earthy', 'citrus', 'berry', 'pine', 'fruity', 'spicy', 
-      'diesel', 'skunk', 'vanilla', 'chocolate', 'mint', 'lemon'
+      'sweet',
+      'earthy',
+      'citrus',
+      'berry',
+      'pine',
+      'fruity',
+      'spicy',
+      'diesel',
+      'skunk',
+      'vanilla',
+      'chocolate',
+      'mint',
+      'lemon',
     ];
 
     const found = commonFlavors.filter(flavor => text.includes(flavor));
@@ -1005,8 +1488,16 @@ Analysiere den Text sorgfältig und extrahiere die Daten:
 
   private extractMedicalFromText(text: string): string[] | null {
     const medicalUses = [
-      'pain', 'stress', 'anxiety', 'depression', 'insomnia', 'nausea', 
-      'headache', 'inflammation', 'seizures', 'ptsd'
+      'pain',
+      'stress',
+      'anxiety',
+      'depression',
+      'insomnia',
+      'nausea',
+      'headache',
+      'inflammation',
+      'seizures',
+      'ptsd',
     ];
 
     const found = medicalUses.filter(condition => text.includes(condition));

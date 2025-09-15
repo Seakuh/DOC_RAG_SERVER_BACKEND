@@ -200,14 +200,110 @@ export class CannabisController {
     return await this.cannabisService.processStrainFromText(processTextDto);
   }
 
-  @Post('scientific-question')
+  @Get('strains/:id/similar')
   @ApiOperation({ 
+    summary: 'Ähnliche Cannabis-Strains finden',
+    description: 'Findet ähnliche Cannabis-Strains basierend auf Vector-Similarity-Search in der Pinecone-Datenbank'
+  })
+  @ApiParam({ 
+    name: 'id', 
+    type: 'string', 
+    description: 'ID des Referenz-Strains',
+    example: 'strain-uuid-123'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Ähnliche Strains erfolgreich gefunden',
+    example: [
+      {
+        id: 'strain-uuid-456',
+        name: 'Purple Haze',
+        type: 'sativa',
+        similarity: 0.89,
+        thc: 19.5,
+        effects: ['euphoric', 'creative', 'uplifted'],
+        description: 'A legendary sativa strain...'
+      }
+    ]
+  })
+  @ApiResponse({ status: 404, description: 'Strain nicht gefunden' })
+  @ApiResponse({ status: 500, description: 'Fehler beim Finden ähnlicher Strains' })
+  async getSimilarStrains(
+    @Param('id') strainId: string
+  ): Promise<any[]> {
+    this.logger.log(`Finding similar strains for ID: ${strainId}`);
+    return await this.cannabisService.findSimilarStrains(strainId);
+  }
+
+  @Post('strain-recommendations')
+  @ApiOperation({
+    summary: 'Strain-Empfehlungen basierend auf Stimmung mit KI-generiertem Text',
+    description: 'Nimmt eine Stimmungsbeschreibung entgegen und gibt passende Cannabis-Strains mit personalisierten Empfehlungstexten zurück'
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        moodDescription: {
+          type: 'string',
+          description: 'Beschreibung deiner aktuellen Stimmung oder gewünschten Effekte',
+          example: 'Ich fühle mich gestresst nach der Arbeit und möchte entspannen'
+        },
+        maxResults: {
+          type: 'number',
+          description: 'Maximale Anzahl der Strain-Empfehlungen',
+          example: 5,
+          default: 5
+        }
+      },
+      required: ['moodDescription']
+    }
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Strain-Empfehlungen erfolgreich generiert',
+    example: {
+      moodAnalysis: {
+        detectedMood: 'gestresst, entspannung suchend',
+        recommendedEffects: ['relaxed', 'calm', 'stress-relief'],
+        timeContext: 'nach der Arbeit'
+      },
+      strains: [
+        {
+          id: 'strain-uuid-123',
+          name: 'Blue Dream',
+          type: 'hybrid',
+          description: 'A balanced hybrid strain...',
+          thc: 18.5,
+          cbd: 0.2,
+          effects: ['happy', 'relaxed', 'creative'],
+          recommendationText: 'Blue Dream ist perfekt für deine Situation nach einem stressigen Arbeitstag. Die ausgewogene Hybrid-Genetik bietet sowohl zerebrale Stimulation als auch körperliche Entspannung...',
+          similarity: 0.89,
+          matchReason: 'Ideal für Stress-Abbau und sanfte Entspannung'
+        }
+      ],
+      totalResults: 5,
+      processingTime: 1250,
+      generatedAt: '2025-09-15T10:30:00.000Z'
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Ungültige Stimmungsbeschreibung' })
+  @ApiResponse({ status: 500, description: 'Fehler bei der Generierung der Strain-Empfehlungen' })
+  async getStrainRecommendations(
+    @Body() moodRequestDto: { moodDescription: string; maxResults?: number }
+  ): Promise<any> {
+    this.logger.log(`Generating strain recommendations for mood: "${moodRequestDto.moodDescription.substring(0, 50)}..."`);
+    return await this.cannabisService.getStrainRecommendationsWithText(moodRequestDto);
+  }
+
+  @Post('scientific-question')
+  @ApiOperation({
     summary: 'Wissenschaftliche Cannabis-Fragen mit Cognee-Integration beantworten',
     description: 'Beantwortet wissenschaftliche Fragen über Cannabis basierend auf Forschungsdaten aus dem Cognee Knowledge Graph und der Cannabis-Strain-Datenbank'
   })
   @ApiBody({ type: ScientificQuestionDto })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Wissenschaftliche Antwort mit Quellen und Erkenntnissen',
     type: ScientificAnswerDto,
     example: {

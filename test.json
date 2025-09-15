@@ -1,0 +1,57 @@
+{
+  "moodAnalysis": {
+    "detectedMood": "Ich möchte glücklich sein",
+    "recommendedEffects": ["relaxed", "happy"],
+    "timeContext": "allgemeine Nutzung",
+    "intensity": "medium",
+    "strainType": "hybrid",
+    "keywords": ["cannabis", "strain"]
+  },
+  "strains": [
+    {
+      "terpenes": null,
+      "recommendationText": "Aufgrund der bereitgestellten Informationen kann ich keine personalisierte Empfehlung für den Strain \"undefined\" schreiben. Die Angaben zum Strain sind unzureichend, da der Typ, der THC- und CBD-Gehalt und die spezifischen Effekte unbekannt sind. Daher kann ich nicht beurteilen, ob dieser Strain zu Ihrer Stimmung passt oder welche Effekte Sie erwarten können. Es tut mir leid, aber ich kann Ihnen in diesem Fall nicht weiterhelfen.",
+      "similarity": 0.59,
+      "matchReason": "Empfohlen aufgrund der Strain-Eigenschaften und Ähnlichkeit zu deiner Stimmung"
+    },
+    {
+      "terpenes": null,
+      "recommendationText": "Da die bereitgestellten Informationen über den Strain \"undefined\" unvollständig und unbestimmt sind, kann ich leider keine spezifische Empfehlung zu diesem Strain abgeben. In den bereitgestellten Informationen fehlen wesentliche Details wie Typ, THC- und CBD-Gehalt sowie spezifische Effekte und medizinische Anwendungen. Es wäre notwendig, diese Informationen zu haben, um eine genaue Empfehlung zu geben, die auf die Stimmung und Bedürfnisse des Nutzers abgestimmt ist.",
+      "similarity": 0.57,
+      "matchReason": "Empfohlen aufgrund der Strain-Eigenschaften und Ähnlichkeit zu deiner Stimmung"
+    },
+    {
+      "terpenes": null,
+      "recommendationText": "Leider kann ich aufgrund der unzureichenden Informationen über den Strain \"undefined\" keine genaue Empfehlung abgeben. Es fehlen spezifische Details über den Typ, den THC- und CBD-Gehalt sowie die spezifischen Effekte und medizinischen Anwendungen dieses Strains. Es wäre ratsam, mehr Informationen über den bestimmten Cannabis-Strain zu sammeln, bevor eine Empfehlung gegeben wird.",
+      "similarity": 0.56,
+      "matchReason": "Empfohlen aufgrund der Strain-Eigenschaften und Ähnlichkeit zu deiner Stimmung"
+    },
+    {
+      "terpenes": null,
+      "recommendationText": "Leider sind die Informationen über den Strain \"undefined\" nicht ausreichend, um eine personalisierte Empfehlung zu erstellen. Es fehlen spezifische Details wie Typ, THC- und CBD-Gehalt sowie genaue Effekte und medizinische Anwendungen. Ohne diese Informationen können wir keine genaue Aussage darüber treffen, ob dieser Strain zur gewünschten Stimmung des Nutzers \"Ich möchte glücklich sein\" passt und welche Effekte zu erwarten sind.",
+      "similarity": 0.56,
+      "matchReason": "Empfohlen aufgrund der Strain-Eigenschaften und Ähnlichkeit zu deiner Stimmung"
+    },
+    {
+      "id": "e1faac7d-a7ee-43d4-8d12-2139aff08480",
+      "name": "Blue Dream",
+      "type": "hybrid",
+      "description": "A balanced hybrid strain known for its sweet berry aroma and relaxing effects",
+      "thc": 18.5,
+      "cbd": 0.1,
+      "effects": ["happy", "relaxed", "euphoric", "creative"],
+      "flavors": ["berry", "sweet", "vanilla"],
+      "medical": ["stress", "depression", "pain"],
+      "terpenes": [[], []],
+      "genetics": "Blueberry x Haze",
+      "rating": 4.2,
+      "recommendationText": "Für deine aktuelle Stimmung, in der du nach Glück suchst, scheint der Blue Dream Strain eine gute Wahl zu sein. Seine Effekte sind genau auf deine Bedürfnisse abgestimmt, da er bekanntermaßen ein Gefühl von Glück und Entspannung hervorruft. Mit seinem mittleren Intensitätsgrad sorgt er für eine ausgeglichene und freudige Erfahrung, wobei seine kreativen Aspekte auch dazu beitragen könnten, deine Stimmung zu heben. Es ist immer wichtig, sich daran zu erinnern, verantwortungsvoll und in Übereinstimmung mit deinem Komfortniveau zu konsumieren.",
+      "similarity": 0.56,
+      "matchReason": "Perfekt für Ich möchte glücklich sein - bietet happy, relaxed",
+      "createdAt": "2025-09-11T16:37:31.299Z"
+    }
+  ],
+  "totalResults": 5,
+  "processingTime": 19424,
+  "generatedAt": "2025-09-15T21:30:05.424Z"
+}

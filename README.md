@@ -157,6 +157,7 @@ Swagger Dokumentation: `http://localhost:3000/api`
 ### Cannabis Strain Management & Recommendations 🌿
 - `POST /api/v1/cannabis/strains` - Cannabis Strain hinzufügen
 - `POST /api/v1/cannabis/recommendations` - Mood-basierte Strain-Empfehlungen
+- `POST /api/v1/cannabis/strain-recommendations` - Stimmungsbasierte Strain-Empfehlungen mit KI-Text
 - `GET /api/v1/cannabis/strains` - Alle Strains auflisten
 - `DELETE /api/v1/cannabis/strains/:id` - Strain löschen
 - `GET /api/v1/cannabis/health` - Cannabis Service Health Check
@@ -274,6 +275,75 @@ curl -X DELETE "http://localhost:3000/api/v1/cannabis/strains/strain-uuid-123" \
 ```bash
 curl -X GET "http://localhost:3000/api/v1/cannabis/stats" \
   -H "Content-Type: application/json"
+```
+
+### Stimmungsbasierte Strain-Empfehlungen mit KI-Text 🌿🤖
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/cannabis/strain-recommendations" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "moodDescription": "Ich fühle mich gestresst nach der Arbeit und möchte entspannen",
+    "maxResults": 5
+  }'
+```
+
+**Weitere Beispiele für Stimmungsbeschreibungen:**
+```bash
+# Kreative Session
+curl -X POST "http://localhost:3000/api/v1/cannabis/strain-recommendations" \
+  -H "Content-Type: application/json" \
+  -d '{"moodDescription": "Ich möchte kreativ sein und an meinem Kunstprojekt arbeiten"}'
+
+# Entspannung am Abend
+curl -X POST "http://localhost:3000/api/v1/cannabis/strain-recommendations" \
+  -H "Content-Type: application/json" \
+  -d '{"moodDescription": "Müde vom Tag, brauche Entspannung für Netflix & Chill"}'
+
+# Energie für den Tag
+curl -X POST "http://localhost:3000/api/v1/cannabis/strain-recommendations" \
+  -H "Content-Type: application/json" \
+  -d '{"moodDescription": "Morgens, brauche Energie und Fokus für die Arbeit"}'
+```
+
+**Antwort-Beispiel:**
+```json
+{
+  "moodAnalysis": {
+    "detectedMood": "gestresst, entspannung suchend",
+    "recommendedEffects": ["relaxed", "calm", "stress-relief"],
+    "timeContext": "nach der Arbeit",
+    "intensity": "medium",
+    "strainType": "indica",
+    "keywords": ["stress-relief", "relaxation"]
+  },
+  "strains": [
+    {
+      "id": "strain-uuid-123",
+      "name": "Blue Dream",
+      "type": "hybrid",
+      "description": "A balanced hybrid strain known for its sweet berry aroma...",
+      "thc": 18.5,
+      "cbd": 0.2,
+      "effects": ["happy", "relaxed", "creative"],
+      "flavors": ["berry", "sweet", "vanilla"],
+      "medical": ["stress", "depression", "pain"],
+      "terpenes": [
+        {"name": "Myrcene", "percentage": 0.8},
+        {"name": "Limonene", "percentage": 0.6}
+      ],
+      "genetics": "Blueberry x Haze",
+      "rating": 4.2,
+      "recommendationText": "Für deine stressige Situation nach der Arbeit ist Blue Dream genau das Richtige. Die ausgewogene Hybrid-Genetik hilft dir dabei, vom Arbeitsstress abzuschalten und gleichzeitig entspannt aber nicht müde zu werden. Mit seinen entspannenden Effekten ist es perfekt für dein After-Work-Ritual.",
+      "similarity": 0.89,
+      "matchReason": "Perfekt für gestresst, entspannung suchend - bietet relaxed, calm",
+      "createdAt": "2025-09-15T10:00:00.000Z"
+    }
+  ],
+  "totalResults": 5,
+  "processingTime": 1250,
+  "generatedAt": "2025-09-15T10:30:00.000Z"
+}
 ```
 
 ---
