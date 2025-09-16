@@ -5,6 +5,8 @@ import { PineconeModule } from '../pinecone/pinecone.module';
 import { EmbeddingsModule } from '../embeddings/embeddings.module';
 import { LLMModule } from '../llm/llm.module';
 import { CogneeModule } from '../cognee/cognee.module';
+import { QdrantModule } from '../qdrant/qdrant.module';
+import { DatabaseModule } from '../database/database.module';
 
 @Module({
   imports: [
@@ -12,6 +14,8 @@ import { CogneeModule } from '../cognee/cognee.module';
     EmbeddingsModule,
     LLMModule,
     CogneeModule,
+    QdrantModule,
+    DatabaseModule,
   ],
   controllers: [CannabisController],
   providers: [CannabisService],

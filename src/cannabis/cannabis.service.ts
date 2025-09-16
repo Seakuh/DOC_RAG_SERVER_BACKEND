@@ -5,6 +5,9 @@ import { CogneeDataType, UploadDataDto } from '../cognee/dto/upload-data.dto';
 import { EmbeddingsService } from '../embeddings/embeddings.service';
 import { LLMService } from '../llm/llm.service';
 import { PineconeService } from '../pinecone/pinecone.service';
+import { QdrantService } from '../qdrant/qdrant.service';
+import { VectorizationService } from '../qdrant/vectorization.service';
+import { StrainService } from '../database/strain.service';
 import { CreateStrainDto, StrainType } from './dto/create-strain.dto';
 import { ActivityContext, MoodRecommendationDto, TimeOfDay } from './dto/mood-recommendation.dto';
 import { ProcessStrainTextDto, ProcessedStrainResponseDto } from './dto/process-strain-text.dto';
@@ -41,6 +44,9 @@ export class CannabisService {
     private readonly embeddingsService: EmbeddingsService,
     private readonly llmService: LLMService,
     private readonly cogneeService: CogneeService,
+    private readonly qdrantService: QdrantService,
+    private readonly vectorizationService: VectorizationService,
+    private readonly strainService: StrainService,
   ) {}
 
   /**
@@ -1578,5 +1584,239 @@ Analysiere den Text sorgfältig und extrahiere die Daten:
 
     const found = medicalUses.filter(condition => text.includes(condition));
     return found.length > 0 ? found : null;
+  }
+
+  /**
+   * Get Qdrant strain recommendations based on mood
+   */
+  async getQdrantStrainRecommendations(moodRequest: {
+    moodDescription: string;
+    maxResults?: number;
+  }): Promise<any> {
+    try {
+      const startTime = Date.now();
+      this.logger.log(
+        `Generating Qdrant strain recommendations for mood: "${moodRequest.moodDescription.substring(0, 50)}..."`
+      );
+
+      // Analyze mood
+      const moodAnalysis = await this.analyzeMoodForQdrantSearch(moodRequest.moodDescription);
+
+      // Search for similar strains using vectorization service
+      const strains = await this.vectorizationService.findSimilarStrains(
+        moodRequest.moodDescription,
+        moodRequest.maxResults || 5
+      );
+
+      if (strains.length === 0) {
+        return {
+          moodAnalysis,
+          strains: [],
+          totalResults: 0,
+          processingTime: Date.now() - startTime,
+          generatedAt: new Date().toISOString(),
+          message: 'Keine passenden Strains für deine Stimmung gefunden'
+        };
+      }
+
+      // Generate personalized recommendation text for each strain
+      const enrichedStrains = await Promise.all(
+        strains.map(async (strain) => {
+          const recommendationText = await this.generateQdrantRecommendationText(
+            strain,
+            moodRequest.moodDescription,
+            moodAnalysis
+          );
+
+          return {
+            ...strain,
+            recommendationText
+          };
+        })
+      );
+
+      const processingTime = Date.now() - startTime;
+
+      return {
+        moodAnalysis,
+        strains: enrichedStrains,
+        totalResults: enrichedStrains.length,
+        processingTime,
+        generatedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      this.logger.error(`Failed to generate Qdrant strain recommendations: ${error.message}`, error.stack);
+      throw new BadRequestException(`Failed to generate Qdrant strain recommendations: ${error.message}`);
+    }
+  }
+
+  /**
+   * Vectorize MongoDB strains collection to Qdrant
+   */
+  async vectorizeMongoStrains(): Promise<any> {
+    try {
+      const startTime = Date.now();
+      this.logger.log('Starting vectorization of MongoDB strains to Qdrant');
+
+      // Fetch all strains from MongoDB
+      const mongoStrains = await this.strainService.findAll();
+
+      if (mongoStrains.length === 0) {
+        this.logger.warn('No strains found in MongoDB collection');
+        return {
+          message: 'No strains found in MongoDB collection to vectorize',
+          totalStrains: 0,
+          successfulVectorizations: 0,
+          failures: 0,
+          processingTime: Date.now() - startTime
+        };
+      }
+
+      // Convert MongoDB documents to vectorization format
+      const strainsForVectorization = mongoStrains.map(strain => ({
+        _id: (strain as any)._id?.toString() || strain.name,
+        name: strain.name,
+        type: strain.type as 'indica' | 'sativa' | 'hybrid',
+        description: strain.description,
+        thc: strain.thc,
+        cbd: strain.cbd,
+        effects: strain.effects || [],
+        flavors: strain.flavors || [],
+        medical: strain.medical || [],
+        genetics: strain.genetics,
+        breeder: strain.breeder,
+      }));
+
+      await this.vectorizationService.vectorizeStrains(strainsForVectorization);
+
+      const processingTime = Date.now() - startTime;
+
+      return {
+        message: `Successfully vectorized ${mongoStrains.length} strains from MongoDB to Qdrant`,
+        totalStrains: mongoStrains.length,
+        successfulVectorizations: mongoStrains.length,
+        failures: 0,
+        processingTime
+      };
+    } catch (error) {
+      this.logger.error(`Failed to vectorize MongoDB strains: ${error.message}`, error.stack);
+      throw new BadRequestException(`Failed to vectorize MongoDB strains: ${error.message}`);
+    }
+  }
+
+  private async analyzeMoodForQdrantSearch(moodDescription: string): Promise<any> {
+    const prompt = `
+Analysiere diese Stimmungsbeschreibung für Cannabis-Strain-Empfehlungen:
+
+Stimmung: "${moodDescription}"
+
+Extrahiere und gib als JSON zurück:
+{
+  "detectedMood": "kurze Zusammenfassung der Hauptstimmung",
+  "recommendedEffects": ["array", "von", "gewünschten", "effekten"],
+  "strainType": "indica|sativa|hybrid - empfohlener Strain-Typ",
+  "timeContext": "vermutete Tageszeit",
+  "intensity": "low|medium|high"
+}
+    `;
+
+    try {
+      const response = await this.llmService.generateResponse(prompt, []);
+      return JSON.parse(response.answer);
+    } catch (error) {
+      this.logger.warn(`Could not analyze mood with AI, using fallback: ${error.message}`);
+
+      const moodLower = moodDescription.toLowerCase();
+      return {
+        detectedMood: moodDescription.substring(0, 100),
+        recommendedEffects: this.extractEffectsFromMoodText(moodLower),
+        strainType: this.determineStrainTypeFromMood(moodLower),
+        timeContext: this.extractTimeContext(moodLower),
+        intensity: 'medium'
+      };
+    }
+  }
+
+  private async generateQdrantRecommendationText(
+    strain: any,
+    moodDescription: string,
+    moodAnalysis: any
+  ): Promise<string> {
+    const prompt = `
+Du bist ein Cannabis-Experte. Schreibe einen personalisierten Empfehlungstext für "${strain.name}".
+
+Nutzerstimmung: "${moodDescription}"
+Stimmungsanalyse: ${JSON.stringify(moodAnalysis)}
+
+Strain-Info:
+- Name: ${strain.name}
+- Typ: ${strain.type}
+- Effekte: ${strain.effects?.join(', ') || 'verschiedene'}
+- THC: ${strain.thc || 'unbekannt'}%
+
+Schreibe 2-3 Sätze, die erklären warum dieser Strain zur Stimmung passt.
+    `;
+
+    try {
+      const response = await this.llmService.generateResponse(prompt, []);
+      return response.answer;
+    } catch (error) {
+      return `${strain.name} ist eine ausgezeichnete Wahl für deine aktuelle Stimmung. Dieser ${strain.type}-Strain bietet ${strain.effects?.join(', ') || 'vielseitige Effekte'} und ist perfekt für ${moodAnalysis.timeContext || 'verschiedene Gelegenheiten'}.`;
+    }
+  }
+
+  private generateMockStrains(): any[] {
+    return [
+      {
+        _id: '1',
+        name: 'Blue Dream',
+        type: 'hybrid',
+        description: 'A balanced hybrid strain providing cerebral euphoria and body relaxation',
+        thc: 18,
+        cbd: 0.2,
+        effects: ['happy', 'relaxed', 'creative', 'euphoric'],
+        flavors: ['berry', 'sweet', 'vanilla']
+      },
+      {
+        _id: '2',
+        name: 'Green Crack',
+        type: 'sativa',
+        description: 'An energizing sativa perfect for daytime use',
+        thc: 20,
+        cbd: 0.1,
+        effects: ['energetic', 'focused', 'creative', 'uplifted'],
+        flavors: ['citrus', 'sweet', 'tropical']
+      },
+      {
+        _id: '3',
+        name: 'Purple Kush',
+        type: 'indica',
+        description: 'A pure indica strain perfect for evening relaxation',
+        thc: 22,
+        cbd: 0.1,
+        effects: ['relaxed', 'sleepy', 'happy', 'euphoric'],
+        flavors: ['grape', 'sweet', 'earthy']
+      },
+      {
+        _id: '4',
+        name: 'Sour Diesel',
+        type: 'sativa',
+        description: 'Fast-acting energizing strain with diesel aroma',
+        thc: 19,
+        cbd: 0.2,
+        effects: ['energetic', 'uplifted', 'creative', 'focused'],
+        flavors: ['diesel', 'pungent', 'citrus']
+      },
+      {
+        _id: '5',
+        name: 'OG Kush',
+        type: 'hybrid',
+        description: 'Classic hybrid with complex terpene profile',
+        thc: 24,
+        cbd: 0.1,
+        effects: ['relaxed', 'euphoric', 'happy', 'uplifted'],
+        flavors: ['pine', 'woody', 'citrus']
+      }
+    ];
   }
 }

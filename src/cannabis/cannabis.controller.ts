@@ -341,4 +341,86 @@ export class CannabisController {
     this.logger.log(`Processing scientific question: "${questionDto.question.substring(0, 100)}..."`);
     return await this.cannabisService.answerScientificQuestion(questionDto);
   }
+
+  @Post('qdrant-recommendations')
+  @ApiOperation({
+    summary: 'Strain-Empfehlungen mit Qdrant Vector Search',
+    description: 'Generiert personalisierte Cannabis-Strain-Empfehlungen basierend auf Stimmung mit Qdrant Vector Database'
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        moodDescription: {
+          type: 'string',
+          description: 'Beschreibung deiner aktuellen Stimmung oder gewünschten Effekte',
+          example: 'heute fühle ich mich nach etwas wach machenden'
+        },
+        maxResults: {
+          type: 'number',
+          description: 'Maximale Anzahl der Strain-Empfehlungen',
+          example: 5,
+          default: 5
+        }
+      },
+      required: ['moodDescription']
+    }
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Strain-Empfehlungen mit Qdrant erfolgreich generiert',
+    example: {
+      moodAnalysis: {
+        detectedMood: 'energetisch, wach machend',
+        recommendedEffects: ['energetic', 'uplifted', 'focused'],
+        strainType: 'sativa'
+      },
+      strains: [
+        {
+          id: 'strain-123',
+          name: 'Green Crack',
+          type: 'sativa',
+          description: 'An energizing sativa strain...',
+          thc: 20.5,
+          cbd: 0.1,
+          effects: ['energetic', 'focused', 'creative'],
+          similarity: 0.92,
+          recommendationText: 'Für deine aktuelle energetische Stimmung ist Green Crack perfekt...'
+        }
+      ],
+      totalResults: 5,
+      processingTime: 850,
+      generatedAt: '2025-09-16T10:30:00.000Z'
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Ungültige Stimmungsbeschreibung' })
+  @ApiResponse({ status: 500, description: 'Fehler bei der Generierung der Qdrant-Empfehlungen' })
+  async getQdrantStrainRecommendations(
+    @Body() moodRequest: { moodDescription: string; maxResults?: number }
+  ): Promise<any> {
+    this.logger.log(`Generating Qdrant strain recommendations for mood: "${moodRequest.moodDescription.substring(0, 50)}..."`);
+    return await this.cannabisService.getQdrantStrainRecommendations(moodRequest);
+  }
+
+  @Post('vectorize-mongo-strains')
+  @ApiOperation({
+    summary: 'MongoDB Strains zu Qdrant vectorisieren',
+    description: 'Lädt alle Cannabis-Strains aus der MongoDB Collection und vectorisiert sie in Qdrant'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Strains erfolgreich vectorisiert',
+    example: {
+      message: 'Successfully vectorized 150 strains from MongoDB to Qdrant',
+      totalStrains: 150,
+      successfulVectorizations: 148,
+      failures: 2,
+      processingTime: 45000
+    }
+  })
+  @ApiResponse({ status: 500, description: 'Fehler bei der Vectorisierung' })
+  async vectorizeMongoStrains(): Promise<any> {
+    this.logger.log('Starting vectorization of MongoDB strains to Qdrant');
+    return await this.cannabisService.vectorizeMongoStrains();
+  }
 }
