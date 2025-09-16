@@ -620,16 +620,26 @@ export class CannabisService {
   /**
    * Get strain recommendations with AI-generated recommendation text based on mood
    */
-  async getStrainRecommendationsWithText(moodRequest: { moodDescription: string; maxResults?: number }): Promise<any> {
+  async getStrainRecommendationsWithText(moodRequest: {
+    moodDescription: string;
+    maxResults?: number;
+  }): Promise<any> {
     try {
       const startTime = Date.now();
-      this.logger.log(`Generating strain recommendations with AI text for mood: "${moodRequest.moodDescription.substring(0, 50)}..."`);
+      this.logger.log(
+        `Generating strain recommendations with AI text for mood: "${moodRequest.moodDescription.substring(0, 50)}..."`,
+      );
 
       // Analyze the mood description with AI first
-      const moodAnalysis = await this.analyzeMoodForStrainRecommendation(moodRequest.moodDescription);
+      const moodAnalysis = await this.analyzeMoodForStrainRecommendation(
+        moodRequest.moodDescription,
+      );
 
       // Create enhanced search query based on mood
-      const searchQuery = this.createMoodBasedSearchQuery(moodRequest.moodDescription, moodAnalysis);
+      const searchQuery = this.createMoodBasedSearchQuery(
+        moodRequest.moodDescription,
+        moodAnalysis,
+      );
 
       // Generate embedding for the mood-based search query
       const queryEmbedding = await this.embeddingsService.generateEmbedding(searchQuery);
@@ -651,34 +661,53 @@ export class CannabisService {
 
       // Process each strain and generate personalized recommendation text
       const strainsWithRecommendations = await Promise.all(
-        searchResults.map(async result => {
-          const metadata = result.metadata as unknown as StrainMetadata;
+        searchResults
+          .filter(result => result.metadata && (result.metadata as any).name) // Filter out results without proper metadata
+          .map(async result => {
+            const metadata = result.metadata as unknown as StrainMetadata;
 
-          // Generate personalized AI recommendation text for this strain based on mood
-          const recommendationText = await this.generateMoodBasedRecommendationText(metadata, moodRequest.moodDescription, moodAnalysis);
+            // Ensure we have valid metadata with fallbacks
+            const cleanMetadata = this.sanitizeStrainMetadata(metadata);
 
-          // Generate match reason
-          const matchReason = await this.generateMatchReason(metadata, moodAnalysis);
+            // Generate personalized AI recommendation text for this strain based on mood
+            const recommendationText = await this.generateMoodBasedRecommendationText(
+              cleanMetadata,
+              moodRequest.moodDescription,
+              moodAnalysis,
+            );
 
-          return {
-            id: metadata.strainId,
-            name: metadata.name,
-            type: metadata.type,
-            description: metadata.description,
-            thc: metadata.thc,
-            cbd: metadata.cbd,
-            effects: metadata.effects,
-            flavors: metadata.flavors,
-            medical: metadata.medical,
-            terpenes: metadata.terpenes ? JSON.parse(metadata.terpenes) : null,
-            genetics: metadata.genetics,
-            rating: metadata.rating,
-            recommendationText,
-            similarity: Math.round(result.score * 100) / 100,
-            matchReason,
-            createdAt: metadata.createdAt,
-          };
-        }),
+            // Generate match reason
+            const matchReason = await this.generateMatchReason(cleanMetadata, moodAnalysis);
+
+            const strainResponse: any = {
+              id: cleanMetadata.strainId || result.id,
+              name: cleanMetadata.name,
+              type: cleanMetadata.type,
+              description: cleanMetadata.description,
+              effects: cleanMetadata.effects || [],
+              recommendationText,
+              similarity: Math.round(result.score * 100) / 100,
+              matchReason,
+              createdAt: cleanMetadata.createdAt,
+            };
+
+            // Only add properties if they have meaningful values
+            if (cleanMetadata.thc !== undefined) strainResponse.thc = cleanMetadata.thc;
+            if (cleanMetadata.cbd !== undefined) strainResponse.cbd = cleanMetadata.cbd;
+            if (cleanMetadata.flavors && cleanMetadata.flavors.length > 0)
+              strainResponse.flavors = cleanMetadata.flavors;
+            if (cleanMetadata.medical && cleanMetadata.medical.length > 0)
+              strainResponse.medical = cleanMetadata.medical;
+            if (cleanMetadata.genetics) strainResponse.genetics = cleanMetadata.genetics;
+            if (cleanMetadata.rating !== undefined) strainResponse.rating = cleanMetadata.rating;
+
+            const parsedTerpenes = this.parseTerpenes(cleanMetadata.terpenes);
+            if (parsedTerpenes && parsedTerpenes.length > 0) {
+              strainResponse.terpenes = parsedTerpenes;
+            }
+
+            return strainResponse;
+          }),
       );
 
       const processingTime = Date.now() - startTime;
@@ -732,7 +761,7 @@ Fokus auf Cannabis-spezifische Effekte: relaxed, happy, euphoric, creative, focu
         timeContext: this.extractTimeContext(moodLower),
         intensity: moodLower.includes('sehr') || moodLower.includes('stark') ? 'high' : 'medium',
         strainType: this.determineStrainTypeFromMood(moodLower),
-        keywords: this.extractKeywordsFromMoodText(moodLower)
+        keywords: this.extractKeywordsFromMoodText(moodLower),
       };
     }
   }
@@ -746,7 +775,7 @@ Fokus auf Cannabis-spezifische Effekte: relaxed, happy, euphoric, creative, focu
       `Desired effects: ${moodAnalysis.recommendedEffects?.join(', ') || 'relaxation'}`,
       `Strain type preference: ${moodAnalysis.strainType || 'hybrid'}`,
       `Context: ${moodAnalysis.timeContext || 'general use'}`,
-      `Keywords: ${moodAnalysis.keywords?.join(', ') || 'cannabis strain'}`
+      `Keywords: ${moodAnalysis.keywords?.join(', ') || 'cannabis strain'}`,
     ];
 
     return parts.join('. ');
@@ -758,7 +787,7 @@ Fokus auf Cannabis-spezifische Effekte: relaxed, happy, euphoric, creative, focu
   private async generateMoodBasedRecommendationText(
     strain: StrainMetadata,
     moodDescription: string,
-    moodAnalysis: any
+    moodAnalysis: any,
   ): Promise<string> {
     const prompt = `
 Du bist ein Cannabis-Experte. Schreibe einen personalisierten Empfehlungstext für den Strain "${strain.name}" basierend auf der Nutzerstimmung.
@@ -787,13 +816,14 @@ Beginne mit "Für deine aktuelle Situation..." oder ähnlich persönlich.
       const response = await this.llmService.generateResponse(prompt, []);
       return response.answer;
     } catch (error) {
-      this.logger.warn(`Could not generate mood-based recommendation text for ${strain.name}, using fallback`);
+      this.logger.warn(
+        `Could not generate mood-based recommendation text for ${strain.name}, using fallback`,
+      );
 
       // Fallback recommendation text
       const moodContext = moodAnalysis.detectedMood || 'deine Stimmung';
-      const effectsMatch = strain.effects?.filter(effect =>
-        moodAnalysis.recommendedEffects?.includes(effect)
-      ) || [];
+      const effectsMatch =
+        strain.effects?.filter(effect => moodAnalysis.recommendedEffects?.includes(effect)) || [];
 
       return `Für ${moodContext} ist ${strain.name} eine ausgezeichnete Wahl. ${effectsMatch.length > 0 ? `Mit Effekten wie ${effectsMatch.join(', ')} ` : ''}Dieser ${strain.type}-Strain ${strain.thc ? `mit ${strain.thc}% THC ` : ''}kann dir dabei helfen, dich ${moodAnalysis.recommendedEffects?.[0] || 'entspannt'} zu fühlen.`;
     }
@@ -803,9 +833,8 @@ Beginne mit "Für deine aktuelle Situation..." oder ähnlich persönlich.
    * Generate match reason for strain recommendation
    */
   private async generateMatchReason(strain: StrainMetadata, moodAnalysis: any): Promise<string> {
-    const effectsMatch = strain.effects?.filter(effect =>
-      moodAnalysis.recommendedEffects?.includes(effect)
-    ) || [];
+    const effectsMatch =
+      strain.effects?.filter(effect => moodAnalysis.recommendedEffects?.includes(effect)) || [];
 
     if (effectsMatch.length > 0) {
       return `Perfekt für ${moodAnalysis.detectedMood} - bietet ${effectsMatch.join(', ')}`;
@@ -822,15 +851,15 @@ Beginne mit "Für deine aktuelle Situation..." oder ähnlich persönlich.
   // Helper methods for fallback mood analysis
   private extractEffectsFromMoodText(moodText: string): string[] {
     const effectsMap = {
-      'stress': ['relaxed', 'calm'],
-      'müde': ['energetic', 'uplifted'],
-      'traurig': ['happy', 'euphoric'],
-      'kreativ': ['creative', 'focused'],
-      'schlafen': ['sleepy', 'relaxed'],
-      'energie': ['energetic', 'uplifted'],
-      'entspann': ['relaxed', 'calm'],
-      'fröhlich': ['happy', 'giggly'],
-      'fokus': ['focused', 'creative']
+      stress: ['relaxed', 'calm'],
+      müde: ['energetic', 'uplifted'],
+      traurig: ['happy', 'euphoric'],
+      kreativ: ['creative', 'focused'],
+      schlafen: ['sleepy', 'relaxed'],
+      energie: ['energetic', 'uplifted'],
+      entspann: ['relaxed', 'calm'],
+      fröhlich: ['happy', 'giggly'],
+      fokus: ['focused', 'creative'],
     };
 
     const effects = [];
@@ -852,10 +881,18 @@ Beginne mit "Für deine aktuelle Situation..." oder ähnlich persönlich.
   }
 
   private determineStrainTypeFromMood(moodText: string): string {
-    if (moodText.includes('entspann') || moodText.includes('schlafen') || moodText.includes('stress')) {
+    if (
+      moodText.includes('entspann') ||
+      moodText.includes('schlafen') ||
+      moodText.includes('stress')
+    ) {
       return 'indica';
     }
-    if (moodText.includes('energie') || moodText.includes('kreativ') || moodText.includes('fokus')) {
+    if (
+      moodText.includes('energie') ||
+      moodText.includes('kreativ') ||
+      moodText.includes('fokus')
+    ) {
       return 'sativa';
     }
     return 'hybrid';
@@ -864,13 +901,13 @@ Beginne mit "Für deine aktuelle Situation..." oder ähnlich persönlich.
   private extractKeywordsFromMoodText(moodText: string): string[] {
     const keywords = [];
     const keywordMap = {
-      'stress': 'stress-relief',
-      'entspann': 'relaxation',
-      'kreativ': 'creative',
-      'energie': 'energizing',
-      'schmerz': 'pain-relief',
-      'schlaf': 'sleep-aid',
-      'angst': 'anxiety-relief'
+      stress: 'stress-relief',
+      entspann: 'relaxation',
+      kreativ: 'creative',
+      energie: 'energizing',
+      schmerz: 'pain-relief',
+      schlaf: 'sleep-aid',
+      angst: 'anxiety-relief',
     };
 
     for (const [word, keyword] of Object.entries(keywordMap)) {
@@ -880,6 +917,45 @@ Beginne mit "Für deine aktuelle Situation..." oder ähnlich persönlich.
     }
 
     return keywords.length > 0 ? keywords : ['cannabis', 'strain'];
+  }
+
+  /**
+   * Sanitize strain metadata to avoid null values and undefined names
+   */
+  private sanitizeStrainMetadata(metadata: any): StrainMetadata {
+    return {
+      strainId: metadata?.strainId || metadata?.id || 'unknown-strain',
+      name: metadata?.name || 'Unknown Strain',
+      type: metadata?.type || 'hybrid',
+      description: metadata?.description || 'Cannabis strain with various effects',
+      thc: typeof metadata?.thc === 'number' ? metadata.thc : undefined,
+      cbd: typeof metadata?.cbd === 'number' ? metadata.cbd : undefined,
+      effects: Array.isArray(metadata?.effects) ? metadata.effects : ['relaxed', 'happy'],
+      flavors: Array.isArray(metadata?.flavors) ? metadata.flavors : undefined,
+      medical: Array.isArray(metadata?.medical) ? metadata.medical : undefined,
+      terpenes: metadata?.terpenes || undefined,
+      genetics: metadata?.genetics || undefined,
+      breeder: metadata?.breeder || undefined,
+      rating: typeof metadata?.rating === 'number' ? metadata.rating : undefined,
+      createdAt: metadata?.createdAt || new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Parse terpenes safely, avoiding null returns
+   */
+  private parseTerpenes(terpenesData: string | undefined): any[] | undefined {
+    if (!terpenesData) {
+      return undefined;
+    }
+
+    try {
+      const parsed = JSON.parse(terpenesData);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : undefined;
+    } catch (error) {
+      this.logger.warn(`Failed to parse terpenes data: ${terpenesData}`);
+      return undefined;
+    }
   }
 
   /**
