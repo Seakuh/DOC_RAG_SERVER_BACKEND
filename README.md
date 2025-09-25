@@ -92,6 +92,9 @@ OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_MODEL=gpt-4
 EMBEDDING_MODEL=text-embedding-3-small
 
+# Replicate Configuration
+REPLICATE_API_TOKEN=your-token
+
 # Cognee Knowledge Graph Configuration
 COGNEE_API_KEY=your_cognee_api_key_here
 COGNEE_BASE_URL=https://api.cognee.ai/v1

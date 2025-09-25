@@ -13,6 +13,7 @@ import { CannabisModule } from './cannabis/cannabis.module';
 import { CogneeModule } from './cognee/cognee.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { ImageGenModule } from './image-gen/image-gen.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { AppService } from './app.service';
     QueryModule,
     CannabisModule,
     CogneeModule,
+    ImageGenModule,
   ],
   controllers: [AppController],
   providers: [
