@@ -6,6 +6,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import * as cors from 'cors';
 import { join } from 'path';
 import { AppModule } from './app.module';
+import * as express from 'express';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -42,6 +43,9 @@ async function bootstrap() {
 
   // API prefix
   app.setGlobalPrefix('api/v1');
+
+  // Stripe webhook needs raw body for signature verification
+  app.use('/api/v1/stripe/webhook', express.raw({ type: 'application/json' }));
 
   // Swagger documentation
   const config = new DocumentBuilder()

@@ -98,6 +98,12 @@ REPLICATE_API_TOKEN=your-token
 # Cognee Knowledge Graph Configuration
 COGNEE_API_KEY=your_cognee_api_key_here
 COGNEE_BASE_URL=https://api.cognee.ai/v1
+
+# Billing / Stripe Configuration
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PRICE_ID=price_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+FRONTEND_URL=http://localhost:5173
 ```
 
 ### 3. Pinecone Index erstellen
@@ -142,6 +148,15 @@ Swagger Dokumentation: `http://localhost:3000/api`
 - `GET /api/v1` - API Status
 - `GET /api/v1/version` - Version Information
 - `GET /api/v1/query/health` - Service Health Check
+
+### Billing & Tokens
+- `GET /api/v1/tokens` – Aktuelles Token-Guthaben (Cookie-basierte Session)
+- `POST /api/v1/checkout` – Stripe Checkout Session erstellen `{ quantity?: number }`
+- `POST /api/v1/stripe/webhook` – Stripe Fulfillment Webhook (signiert)
+
+### Image Generation
+- `POST /api/v1/images/generate` – Text-/Image-to-Image via Replicate (minimax/image-01)
+- `POST /api/v1/generate` – Preset-basierte Generierung via `bubbles[]` + optional `notes` + optional `image`
 
 ### Document Management
 - `POST /api/v1/documents/upload` - Dokument hochladen
@@ -197,6 +212,68 @@ curl -X POST "http://localhost:3000/api/v1/query" \
     "maxResults": 5,
     "minScore": 0.7
   }'
+```
+
+### Image Generation
+
+1) Einfacher Prompt (optional mit Referenzbild – wird als `subject_reference` an Replicate übergeben)
+
+```bash
+http -f POST :3000/api/v1/images/generate \
+  prompt=="A close-up portrait of a leopard" \
+  n:=2 \
+  aspect_ratio=="3:4" \
+  image@./example.jpg
+
+# Erwartete Antwort:
+# { "images": ["https://replicate.delivery/.../output_0.jpeg", "..."] }
+```
+
+2) Preset-driven Endpoint mit bubbles + notes
+
+```bash
+http -f POST :3000/api/v1/generate \
+  bubbles:='["editorial_studio","gym_fit"]' \
+  notes=="slight smile, clean minimal background" \
+  image@./reference.jpg
+
+# Antwort: { "images": ["https://...", ...], "bubbles": ["editorial_studio", "gym_fit"] }
+```
+
+TypeScript/JS Client-Beispiel
+
+```ts
+import type { Bubble } from './types';
+
+export type GenerateRequest = {
+  bubbles: string[];
+  notes?: string;
+  image?: File | Blob;
+};
+
+export interface GenerateResponse { images: string[] }
+type ApiError = { error?: string };
+
+export async function generateImages(baseUrl: string, request: GenerateRequest): Promise<GenerateResponse> {
+  const formData = new FormData();
+  if (request.image) {
+    formData.append('image', request.image);
+  }
+  if (request.notes) {
+    formData.append('notes', request.notes);
+  }
+  formData.append('bubbles', JSON.stringify(request.bubbles));
+
+  const response = await fetch(`${baseUrl}/generate`, { method: 'POST', body: formData });
+  if (!response.ok) {
+    const error: ApiError = await response.json().catch(() => ({} as ApiError));
+    throw new Error(error?.error || 'Generation failed');
+  }
+  return response.json();
+}
+
+// Tipp: baseUrl sollte auf die API-Präfix-Route zeigen, z. B.:
+// const baseUrl = 'http://localhost:3000/api/v1';
 ```
 
 ### Ähnliche Dokumente finden

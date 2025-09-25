@@ -1,5 +1,5 @@
 import {
-  Controller, Post, Body, UseInterceptors, UploadedFile,
+  Controller, Post, Body, UseInterceptors, UploadedFile, Res,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { GenerateImageDto } from './dto/generate-image.dto';
@@ -7,6 +7,7 @@ import { ImageGenService } from './image-gen.service';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Response } from 'express';
 
 @Controller('images')
 export class ImageGenController {
@@ -20,23 +21,23 @@ export class ImageGenController {
   @Post('generate')
   @UseInterceptors(FileInterceptor('image'))
   async generate(
+    @Res() res: Response,
     @Body() dto: GenerateImageDto,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    let imageUrl: string | undefined;
+    let subjectRef: Buffer | undefined;
     if (file) {
-      // Speichere temporär in ./uploads und erzeuge eine file:// URL
+      // Optional: lokal speichern (nicht erforderlich für Replicate)
       const uploadsDir = path.join(process.cwd(), 'uploads');
       if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
       const ext = path.extname(file.originalname || '') || '.bin';
       const name = crypto.randomBytes(8).toString('hex') + ext;
       const full = path.join(uploadsDir, name);
       fs.writeFileSync(full, file.buffer);
-      imageUrl = `file://${full}`;
+      subjectRef = file.buffer;
     }
 
-    const urls = await this.svc.generateImages(dto.prompt, dto.n ?? 1, dto.aspect_ratio, imageUrl);
-    return { count: urls.length, urls };
+    const images = await this.svc.generateImages(dto.prompt, dto.n ?? 1, dto.aspect_ratio, subjectRef);
+    return (res as Response).json({ images });
   }
 }
-

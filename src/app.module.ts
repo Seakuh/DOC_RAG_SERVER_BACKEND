@@ -14,6 +14,7 @@ import { CogneeModule } from './cognee/cognee.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ImageGenModule } from './image-gen/image-gen.module';
+import { BillingModule } from './billing/billing.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { ImageGenModule } from './image-gen/image-gen.module';
     CannabisModule,
     CogneeModule,
     ImageGenModule,
+    BillingModule,
   ],
   controllers: [AppController],
   providers: [
