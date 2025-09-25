@@ -2,14 +2,19 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import * as cors from 'cors';
+import { join } from 'path';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
+
+  // Serve static files
+  app.useStaticAssets(join(__dirname, '..', 'public'));
 
   // Enable CORS with more permissive settings for development
   app.use(
@@ -87,6 +92,7 @@ async function bootstrap() {
   logger.log(`🚀 RAG Backend API is running on: http://localhost:${port}`);
   logger.log(`📚 Swagger documentation: http://localhost:${port}/api`);
   logger.log(`🔍 Health check: http://localhost:${port}/api/v1`);
+  logger.log(`🌿 Strain Finder: http://localhost:${port}/strain-finder.html`);
 
   // Log environment status
   const requiredEnvVars = ['PINECONE_API_KEY', 'PINECONE_INDEX_NAME', 'OPENAI_API_KEY'];

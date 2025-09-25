@@ -73,35 +73,56 @@ export class QdrantService implements OnModuleInit {
   }
 
   async upsertVectors(vectors: QdrantVector[]): Promise<void> {
-    const points = vectors.map((vector) => ({
-      id: vector.id,
-      vector: vector.vector,
-      payload: vector.payload || {},
-    }));
-
     try {
       this.logger.log(`Preparing to upsert ${vectors.length} vectors`);
-      this.logger.log(`First point structure: ${JSON.stringify({
+
+      const points = vectors.map((vector) => {
+        // Validate vector data
+        if (!vector.vector || !Array.isArray(vector.vector)) {
+          throw new Error(`Invalid vector data for ID ${vector.id}`);
+        }
+
+        if (vector.vector.length !== 1536) {
+          throw new Error(`Vector dimension mismatch for ID ${vector.id}: expected 1536, got ${vector.vector.length}`);
+        }
+
+        return {
+          id: Number(vector.id), // Ensure ID is number
+          vector: vector.vector,
+          payload: vector.payload || {},
+        };
+      });
+
+      this.logger.log(`First point validation: ${JSON.stringify({
         id: points[0]?.id,
+        idType: typeof points[0]?.id,
         vectorLength: points[0]?.vector?.length,
         payloadKeys: Object.keys(points[0]?.payload || {})
       }, null, 2)}`);
 
-      const result = await this.client.upsert(this.collectionName, {
-        wait: true,
-        points,
-      });
+      // Process in smaller batches to avoid timeouts
+      const batchSize = 10;
+      let totalUpserted = 0;
 
-      this.logger.log(`Upserted ${vectors.length} vectors to collection ${this.collectionName}`);
-      this.logger.log(`Upsert result: ${JSON.stringify(result)}`);
+      for (let i = 0; i < points.length; i += batchSize) {
+        const batch = points.slice(i, i + batchSize);
+
+        this.logger.log(`Upserting batch ${Math.floor(i / batchSize) + 1}: ${batch.length} points`);
+
+        const result = await this.client.upsert(this.collectionName, {
+          wait: true,
+          points: batch,
+        });
+
+        totalUpserted += batch.length;
+        this.logger.log(`Batch result: ${JSON.stringify(result)}`);
+      }
+
+      this.logger.log(`Successfully upserted ${totalUpserted} vectors to collection ${this.collectionName}`);
     } catch (error) {
-      this.logger.error(`Failed to upsert vectors: ${error.message}`, error.stack);
-      this.logger.error(`Points that failed: ${JSON.stringify(points?.map(p => ({
-        id: p.id,
-        vectorLength: p.vector?.length,
-        vectorType: typeof p.vector,
-        payloadKeys: Object.keys(p.payload || {})
-      })), null, 2)}`);
+      this.logger.error(`Failed to upsert vectors: ${error.message}`);
+      this.logger.error(`Error response: ${JSON.stringify(error.response || error)}`);
+      this.logger.error(`Stack trace: ${error.stack}`);
       throw error;
     }
   }

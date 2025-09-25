@@ -1674,8 +1674,8 @@ Analysiere den Text sorgfältig und extrahiere die Daten:
 
       // Convert MongoDB documents to vectorization format
       const strainsForVectorization = mongoStrains.map(strain => ({
-        _id: (strain as any)._id?.toString() || strain.name,
-        name: strain.name,
+        _id: (strain as any)._id?.toString() || (strain as any).name,
+        name: (strain as any).name,
         type: strain.type as 'indica' | 'sativa' | 'hybrid',
         description: strain.description,
         thc: strain.thc,
@@ -1701,6 +1701,45 @@ Analysiere den Text sorgfältig und extrahiere die Daten:
     } catch (error) {
       this.logger.error(`Failed to vectorize MongoDB strains: ${error.message}`, error.stack);
       throw new BadRequestException(`Failed to vectorize MongoDB strains: ${error.message}`);
+    }
+  }
+
+  async getQdrantCollectionInfo(): Promise<any> {
+    try {
+      const info = await this.qdrantService.getCollectionInfo();
+      return info;
+    } catch (error) {
+      this.logger.error(`Failed to get Qdrant collection info: ${error.message}`, error.stack);
+      throw new BadRequestException(`Failed to get Qdrant collection info: ${error.message}`);
+    }
+  }
+
+  async testSingleVectorUpsert(): Promise<any> {
+    try {
+      // Create a simple test vector
+      const testText = "Cannabis strain: Blue Dream. Type: hybrid. Description: A balanced hybrid strain.";
+      const embedding = await this.embeddingsService.generateEmbedding(testText);
+
+      const testVector = {
+        id: 1,
+        vector: embedding,
+        payload: {
+          name: 'Blue Dream Test',
+          type: 'hybrid',
+          description: 'A test strain for debugging Qdrant'
+        }
+      };
+
+      await this.qdrantService.upsertVectors([testVector]);
+
+      return {
+        message: 'Successfully upserted test vector',
+        vectorId: testVector.id,
+        vectorLength: testVector.vector.length
+      };
+    } catch (error) {
+      this.logger.error(`Failed to test vector upsert: ${error.message}`, error.stack);
+      throw new BadRequestException(`Failed to test vector upsert: ${error.message}`);
     }
   }
 

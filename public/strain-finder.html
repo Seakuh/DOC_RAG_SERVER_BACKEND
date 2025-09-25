@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cannabis Strain Finder</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+
+      .container {
+        background: white;
+        border-radius: 10px;
+        padding: 30px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      h1 {
+        color: #2c5530;
+        text-align: center;
+        margin-bottom: 30px;
+      }
+
+      .input-section {
+        margin-bottom: 30px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 10px;
+        font-weight: bold;
+        color: #333;
+      }
+
+      textarea {
+        width: 100%;
+        padding: 15px;
+        border: 2px solid #ddd;
+        border-radius: 5px;
+        font-size: 16px;
+        resize: vertical;
+        min-height: 80px;
+        box-sizing: border-box;
+      }
+
+      textarea:focus {
+        outline: none;
+        border-color: #4caf50;
+      }
+
+      button {
+        background-color: #4caf50;
+        color: white;
+        padding: 12px 30px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 16px;
+        margin-top: 10px;
+      }
+
+      button:hover {
+        background-color: #45a049;
+      }
+
+      button:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+      }
+
+      .loading {
+        display: none;
+        text-align: center;
+        color: #666;
+        margin: 20px 0;
+      }
+
+      .results {
+        margin-top: 30px;
+      }
+
+      .strain-card {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 15px;
+        background: #fafafa;
+      }
+
+      .strain-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+
+      .strain-name {
+        font-size: 18px;
+        font-weight: bold;
+        color: #2c5530;
+      }
+
+      .strain-type {
+        background: #e8f5e8;
+        padding: 4px 8px;
+        border-radius: 15px;
+        font-size: 12px;
+        text-transform: uppercase;
+        color: #2c5530;
+      }
+
+      .similarity-score {
+        background: #4caf50;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 15px;
+        font-size: 12px;
+      }
+
+      .strain-description {
+        color: #666;
+        margin-bottom: 10px;
+        line-height: 1.4;
+      }
+
+      .strain-details {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .detail-item {
+        font-size: 13px;
+      }
+
+      .detail-label {
+        font-weight: bold;
+        color: #333;
+      }
+
+      .detail-value {
+        color: #666;
+      }
+
+      .effects,
+      .flavors {
+        margin-top: 10px;
+      }
+
+      .tag {
+        display: inline-block;
+        background: #e3f2fd;
+        color: #1976d2;
+        padding: 2px 6px;
+        border-radius: 10px;
+        font-size: 11px;
+        margin: 2px;
+      }
+
+      .no-results {
+        text-align: center;
+        color: #666;
+        font-style: italic;
+        padding: 40px;
+      }
+
+      .error {
+        background: #ffebee;
+        color: #c62828;
+        padding: 15px;
+        border-radius: 5px;
+        margin-top: 15px;
+      }
+
+      .examples {
+        margin-top: 20px;
+        padding: 15px;
+        background: #f0f8f0;
+        border-radius: 5px;
+      }
+
+      .examples h3 {
+        margin: 0 0 10px 0;
+        color: #2c5530;
+        font-size: 14px;
+      }
+
+      .example-text {
+        cursor: pointer;
+        color: #4caf50;
+        text-decoration: underline;
+        display: block;
+        margin: 5px 0;
+        font-size: 13px;
+      }
+
+      .example-text:hover {
+        color: #45a049;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🌿 Cannabis Strain Finder</h1>
+
+      <div class="input-section">
+        <label for="moodInput">Wie fühlst du dich heute? Beschreibe deine Stimmung:</label>
+        <textarea
+          id="moodInput"
+          placeholder="z.B.: heute fühle ich mich nach etwas wach machenden, oder: ich bin gestresst und brauche entspannung"
+        ></textarea>
+        <button id="searchBtn" onclick="searchStrains()">Strain finden</button>
+
+        <div class="examples">
+          <h3>Beispiele:</h3>
+          <span
+            class="example-text"
+            onclick="setExample('heute fühle ich mich nach etwas wach machenden')"
+            >heute fühle ich mich nach etwas wach machenden</span
+          >
+          <span
+            class="example-text"
+            onclick="setExample('ich bin gestresst und brauche entspannung')"
+            >ich bin gestresst und brauche entspannung</span
+          >
+          <span class="example-text" onclick="setExample('ich möchte kreativ und fokussiert sein')"
+            >ich möchte kreativ und fokussiert sein</span
+          >
+          <span class="example-text" onclick="setExample('ich brauche hilfe beim einschlafen')"
+            >ich brauche hilfe beim einschlafen</span
+          >
+          <span class="example-text" onclick="setExample('ich will fröhlich und gesellig sein')"
+            >ich will fröhlich und gesellig sein</span
+          >
+        </div>
+      </div>
+
+      <div class="loading" id="loading">
+        <p>🔍 Suche passende Strains...</p>
+      </div>
+
+      <div class="results" id="results"></div>
+    </div>
+
+    <script>
+      function setExample(text) {
+        document.getElementById('moodInput').value = text;
+      }
+
+      async function searchStrains() {
+        const moodInput = document.getElementById('moodInput').value.trim();
+        const searchBtn = document.getElementById('searchBtn');
+        const loading = document.getElementById('loading');
+        const results = document.getElementById('results');
+
+        if (!moodInput) {
+          alert('Bitte beschreibe deine Stimmung');
+          return;
+        }
+
+        // Show loading state
+        searchBtn.disabled = true;
+        loading.style.display = 'block';
+        results.innerHTML = '';
+
+        try {
+          const response = await fetch(
+            'http://localhost:3000/api/v1/cannabis/qdrant-recommendations',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ moodDescription: moodInput }),
+            },
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const data = await response.json();
+          displayResults(data.strains || data);
+        } catch (error) {
+          console.error('Error:', error);
+          results.innerHTML = `
+                    <div class="error">
+                        Fehler beim Laden der Ergebnisse: ${error.message}
+                    </div>
+                `;
+        } finally {
+          // Hide loading state
+          searchBtn.disabled = false;
+          loading.style.display = 'none';
+        }
+      }
+
+      function displayResults(strains) {
+        const results = document.getElementById('results');
+
+        if (!strains || strains.length === 0) {
+          results.innerHTML = `
+                    <div class="no-results">
+                        Keine passenden Strains gefunden. Versuche eine andere Beschreibung.
+                    </div>
+                `;
+          return;
+        }
+
+        const resultsHTML = strains
+          .map(
+            strain => `
+                <div class="strain-card">
+                    <div class="strain-header">
+                        <div class="strain-name">${strain.name || 'Unbekannt'}</div>
+                        <div>
+                            <span class="strain-type">${strain.type || 'unbekannt'}</span>
+                            <span class="similarity-score">${(strain.similarity * 100).toFixed(1)}% Match</span>
+                        </div>
+                    </div>
+
+                    <div class="strain-description">
+                        ${strain.description || 'Keine Beschreibung verfügbar'}
+                    </div>
+
+                    <div class="strain-details">
+                        ${strain.thc ? `<div class="detail-item"><span class="detail-label">THC:</span> <span class="detail-value">${strain.thc}%</span></div>` : ''}
+                        ${strain.cbd ? `<div class="detail-item"><span class="detail-label">CBD:</span> <span class="detail-value">${strain.cbd}%</span></div>` : ''}
+                        ${strain.genetics ? `<div class="detail-item"><span class="detail-label">Genetik:</span> <span class="detail-value">${strain.genetics}</span></div>` : ''}
+                    </div>
+
+                    ${
+                      strain.effects && strain.effects.length > 0
+                        ? `
+                        <div class="effects">
+                            <strong>Effekte:</strong><br>
+                            ${strain.effects.map(effect => `<span class="tag">${effect}</span>`).join('')}
+                        </div>
+                    `
+                        : ''
+                    }
+
+                    ${
+                      strain.flavors && strain.flavors.length > 0
+                        ? `
+                        <div class="flavors">
+                            <strong>Aromen:</strong><br>
+                            ${strain.flavors.map(flavor => `<span class="tag">${flavor}</span>`).join('')}
+                        </div>
+                    `
+                        : ''
+                    }
+
+                    ${
+                      strain.medical && strain.medical.length > 0
+                        ? `
+                        <div class="flavors">
+                            <strong>Medizinisch:</strong><br>
+                            ${strain.medical.map(medical => `<span class="tag">${medical}</span>`).join('')}
+                        </div>
+                    `
+                        : ''
+                    }
+                </div>
+            `,
+          )
+          .join('');
+
+        results.innerHTML = `<h2>Empfohlene Strains für dich:</h2>${resultsHTML}`;
+      }
+
+      // Allow Enter key to trigger search
+      document.getElementById('moodInput').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          searchStrains();
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -28,14 +28,18 @@ export class EmbeddingsService {
       const startTime = Date.now();
 
       const embeddingModel = this.configService.get<string>('EMBEDDING_MODEL', 'text-embedding-ada-002');
+      this.logger.log(`Using embedding model: ${embeddingModel}`);
+
       const embeddingConfig: any = {
         model: embeddingModel,
         input: text,
       };
-      
-      // For text-embedding-3-small, set dimensions to 1024 to match Pinecone index
+
+      // For text-embedding-3-small and text-embedding-3-large, we can specify dimensions
       if (embeddingModel === 'text-embedding-3-small') {
-        embeddingConfig.dimensions = 1024;
+        embeddingConfig.dimensions = 1536;
+      } else if (embeddingModel === 'text-embedding-3-large') {
+        embeddingConfig.dimensions = 3072;
       }
 
       const response = await this.openai.embeddings.create(embeddingConfig);

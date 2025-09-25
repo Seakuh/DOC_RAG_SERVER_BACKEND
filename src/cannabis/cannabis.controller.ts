@@ -423,4 +423,28 @@ export class CannabisController {
     this.logger.log('Starting vectorization of MongoDB strains to Qdrant');
     return await this.cannabisService.vectorizeMongoStrains();
   }
+
+  @Get('qdrant-collection-info')
+  @ApiOperation({
+    summary: 'Qdrant Collection Info',
+    description: 'Get information about the Qdrant collection'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Collection info retrieved successfully'
+  })
+  async getQdrantCollectionInfo(): Promise<any> {
+    this.logger.log('Getting Qdrant collection info');
+    return await this.cannabisService.getQdrantCollectionInfo();
+  }
+
+  @Post('test-single-vector')
+  @ApiOperation({
+    summary: 'Test single vector upsert',
+    description: 'Test upserting a single test vector to debug Qdrant issues'
+  })
+  async testSingleVector(): Promise<any> {
+    this.logger.log('Testing single vector upsert');
+    return await this.cannabisService.testSingleVectorUpsert();
+  }
 }
