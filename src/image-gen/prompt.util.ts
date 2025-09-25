@@ -97,6 +97,7 @@ export function buildStylingPrompt(
     hairColorTo?: string;
     hairstyleId?: string;
     hairstyleLabel?: string;
+    framing?: 'face' | 'full_body' | 'collection' | string;
   } = {},
 ): string {
   const gender = (opts.gender || 'unspecified').trim();
@@ -105,6 +106,7 @@ export function buildStylingPrompt(
   const notes = (opts.notes && opts.notes.trim()) || 'no extra notes';
   const from = opts.hairColorFrom?.trim();
   const to = opts.hairColorTo?.trim();
+  const framing = (opts.framing || '').trim();
 
   let hairColorLine = 'Keep natural hair color.';
   if (from && to && from !== to) {
@@ -117,13 +119,20 @@ export function buildStylingPrompt(
     'You are an expert portrait stylist. Enhance the input photo accordingly.',
     `Subject gender: ${gender}.`,
     `Desired hairstyle: ${hairstyle}.`,
+    framing === 'face'
+      ? 'Crop to a close-up face portrait (head and a bit of shoulders).'
+      : framing === 'full_body'
+      ? 'Show the full body from head to toe.'
+      : framing === 'collection'
+      ? 'Generate three variants: (1) close-up face, (2) half-body (waist-up), and (3) full body.'
+      : undefined,
     'Hair color:',
     hairColorLine,
     `Additional style bubbles: ${labels.length ? labels.join(', ') : 'none'}.`,
     `User notes: ${notes}.`,
     'Output: high-resolution, realistic portrait, balanced lighting, natural skin texture.',
     baseMods,
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 
   return prompt;
 }

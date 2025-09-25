@@ -29,6 +29,7 @@ export class GenerateController {
     @Body('hairstyleLabel') hairstyleLabel?: string,
     @Body('hairColorFrom') hairColorFrom?: string,
     @Body('hairColorTo') hairColorTo?: string,
+    @Body('framing') framing?: 'face' | 'full_body' | 'collection' | string,
     @Body('amount') amountRaw?: string,
     @UploadedFile() file?: Express.Multer.File,
   ) {
@@ -47,9 +48,9 @@ export class GenerateController {
       throw new BadRequestException('Invalid bubbles JSON');
     }
 
-    const prompt = buildStylingPrompt(bubbles, { notes, gender, hairstyleId, hairstyleLabel, hairColorFrom, hairColorTo });
+    const prompt = buildStylingPrompt(bubbles, { notes, gender, hairstyleId, hairstyleLabel, hairColorFrom, hairColorTo, framing });
     const aspectRatio = getAspectRatio(bubbles);
-    let amount = 1;
+    let amount = framing === 'collection' && amountRaw === undefined ? 3 : 1;
     if (amountRaw !== undefined) {
       const parsed = Number(amountRaw);
       if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
