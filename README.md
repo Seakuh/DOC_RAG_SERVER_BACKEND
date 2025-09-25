@@ -229,12 +229,17 @@ http -f POST :3000/api/v1/images/generate \
 # { "images": ["https://replicate.delivery/.../output_0.jpeg", "..."] }
 ```
 
-2) Preset-driven Endpoint mit bubbles + notes
+2) Preset-driven Endpoint mit bubbles + notes (+ optional amount, Default 1), plus Styling-Optionen (gender, hairstyle, hairColor)
 
 ```bash
 http -f POST :3000/api/v1/generate \
   bubbles:='["editorial_studio","gym_fit"]' \
   notes=="slight smile, clean minimal background" \
+  gender=="male" \
+  hairstyleId=="curly_volume" \
+  hairColorFrom=="#5A3E36" \
+  hairColorTo=="#5A3E36" \
+  amount:=1 \
   image@./reference.jpg
 
 # Antwort: { "images": ["https://...", ...], "bubbles": ["editorial_studio", "gym_fit"] }

@@ -4,7 +4,7 @@ import { ImageGenService } from './image-gen.service';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import { buildPrompt, getAspectRatio } from './prompt.util';
+import { buildStylingPrompt, getAspectRatio } from './prompt.util';
 import { Response } from 'express';
 
 @Controller()
@@ -24,6 +24,12 @@ export class GenerateController {
     @Res() res: Response,
     @Body('bubbles') bubblesJson: string,
     @Body('notes') notes?: string,
+    @Body('gender') gender?: string,
+    @Body('hairstyleId') hairstyleId?: string,
+    @Body('hairstyleLabel') hairstyleLabel?: string,
+    @Body('hairColorFrom') hairColorFrom?: string,
+    @Body('hairColorTo') hairColorTo?: string,
+    @Body('amount') amountRaw?: string,
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (!bubblesJson) {
@@ -41,8 +47,15 @@ export class GenerateController {
       throw new BadRequestException('Invalid bubbles JSON');
     }
 
-    const prompt = buildPrompt(bubbles, notes);
+    const prompt = buildStylingPrompt(bubbles, { notes, gender, hairstyleId, hairstyleLabel, hairColorFrom, hairColorTo });
     const aspectRatio = getAspectRatio(bubbles);
+    let amount = 1;
+    if (amountRaw !== undefined) {
+      const parsed = Number(amountRaw);
+      if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
+        amount = Math.max(1, Math.min(8, Math.floor(parsed)));
+      }
+    }
 
     let subjectRef: Buffer | undefined;
     if (file) {
@@ -55,7 +68,7 @@ export class GenerateController {
       subjectRef = file.buffer;
     }
 
-    const images = await this.svc.generateImages(prompt, 1, aspectRatio, subjectRef);
+    const images = await this.svc.generateImages(prompt, amount, aspectRatio, subjectRef);
     return (res as Response).json({ images });
   }
 }

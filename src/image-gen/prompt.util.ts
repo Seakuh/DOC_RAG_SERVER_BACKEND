@@ -75,3 +75,55 @@ export function getAspectRatio(ids: string[]): string {
   return ids.includes('editorial_studio') ? '3:4' : '1:1';
 }
 
+export const hairStyleMap: Record<string, string> = {
+  curly_volume: 'curly, voluminous hairstyle',
+  slick_back: 'sleek, slicked-back hairstyle',
+  bob_cut: 'clean bob cut',
+  long_waves: 'long, soft waves',
+  buzz_cut: 'short buzz cut',
+};
+
+export function bubbleLabels(ids: string[]): string[] {
+  const index = new Map(bubbles.map((b) => [b.id, b.label] as const));
+  return ids.map((id) => index.get(id) || id);
+}
+
+export function buildStylingPrompt(
+  ids: string[],
+  opts: {
+    notes?: string;
+    gender?: string;
+    hairColorFrom?: string;
+    hairColorTo?: string;
+    hairstyleId?: string;
+    hairstyleLabel?: string;
+  } = {},
+): string {
+  const gender = (opts.gender || 'unspecified').trim();
+  const hairstyle = (opts.hairstyleLabel || (opts.hairstyleId ? hairStyleMap[opts.hairstyleId] : undefined) || 'original hairstyle').trim();
+  const labels = bubbleLabels(ids);
+  const notes = (opts.notes && opts.notes.trim()) || 'no extra notes';
+  const from = opts.hairColorFrom?.trim();
+  const to = opts.hairColorTo?.trim();
+
+  let hairColorLine = 'Keep natural hair color.';
+  if (from && to && from !== to) {
+    hairColorLine = `Apply a smooth hair color gradient from ${from} to ${to}.`;
+  } else if (from) {
+    hairColorLine = `Apply a solid hair color of ${from}.`;
+  }
+
+  const prompt = [
+    'You are an expert portrait stylist. Enhance the input photo accordingly.',
+    `Subject gender: ${gender}.`,
+    `Desired hairstyle: ${hairstyle}.`,
+    'Hair color:',
+    hairColorLine,
+    `Additional style bubbles: ${labels.length ? labels.join(', ') : 'none'}.`,
+    `User notes: ${notes}.`,
+    'Output: high-resolution, realistic portrait, balanced lighting, natural skin texture.',
+    baseMods,
+  ].join('\n');
+
+  return prompt;
+}
