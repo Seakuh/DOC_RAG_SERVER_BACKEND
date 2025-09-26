@@ -1,4 +1,4 @@
-import { Controller, Post, Req, Res } from '@nestjs/common';
+import { Controller, Post, Req, Res, Logger } from '@nestjs/common';
 import { Request, Response } from 'express';
 import Stripe from 'stripe';
 import { BillingService } from './billing.service';
@@ -7,6 +7,7 @@ import { Throttle } from '@nestjs/throttler';
 @Controller('stripe')
 export class StripeWebhookController {
   private stripe?: Stripe;
+  private readonly logger = new Logger('StripeWebhook');
 
   constructor(private readonly billing: BillingService) {
     const key = process.env.STRIPE_SECRET_KEY;
@@ -24,6 +25,7 @@ export class StripeWebhookController {
 
       // req.body is raw Buffer due to express.raw middleware in main.ts
       const event = this.stripe.webhooks.constructEvent(req.body as any, sig, secret);
+      this.logger.log(`Received webhook event type=${event.type} id=${event.id}`);
 
       if (event.type === 'checkout.session.completed') {
         const session = event.data.object as Stripe.Checkout.Session;
@@ -37,12 +39,14 @@ export class StripeWebhookController {
         } catch {}
 
         if (clientId && quantity > 0) {
+          this.logger.log(`Fulfill session: id=${session.id} clientId=${clientId} quantity=${quantity}`);
           await this.billing.safeIncrementFromSession(session.id, clientId, quantity);
         }
       }
 
       return res.status(200).send('ok');
     } catch (err) {
+      this.logger.error(`Webhook error: ${(err as Error).message}`);
       return res.status(400).send(`Webhook Error: ${(err as Error).message}`);
     }
   }

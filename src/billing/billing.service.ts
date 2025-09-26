@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 function isValidClientId(id?: string): id is string {
   if (!id) return false;
@@ -14,6 +14,7 @@ export class BillingService {
   private balances = new Map<string, number>();
   private processedSessions = new Set<string>();
   private locks = new Map<string, Promise<void>>();
+  private readonly logger = new Logger('BillingService');
 
   private async withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
     const prev = this.locks.get(key) || Promise.resolve();
@@ -53,11 +54,16 @@ export class BillingService {
 
   async safeIncrementFromSession(sessionId: string, clientId: string, by: number) {
     if (!isValidClientId(clientId)) return;
-    if (this.processedSessions.has(sessionId)) return; // idempotent
+    if (this.processedSessions.has(sessionId)) {
+      this.logger.log(`Skip duplicate fulfillment for session=${sessionId} clientId=${clientId}`);
+      return; // idempotent
+    }
     await this.withLock(clientId, async () => {
       if (this.processedSessions.has(sessionId)) return;
       this.ensureClient(clientId);
-      this.increment(clientId, by);
+      const before = this.getTokens(clientId);
+      const after = this.increment(clientId, by);
+      this.logger.log(`Credited tokens via Stripe: clientId=${clientId} +${by} (before=${before} after=${after}) session=${sessionId}`);
       this.processedSessions.add(sessionId);
     });
   }
@@ -71,9 +77,11 @@ export class BillingService {
       this.ensureClient(clientId);
       const current = this.getTokens(clientId);
       if (current < amount) {
+        this.logger.warn(`Insufficient tokens: clientId=${clientId} balance=${current} requested=${amount}`);
         throw new Error('INSUFFICIENT_TOKENS');
       }
       this.setTokens(clientId, current - amount);
+      this.logger.log(`Reserved tokens: clientId=${clientId} -${amount} (before=${current} after=${current - amount})`);
     });
   }
 
@@ -82,7 +90,9 @@ export class BillingService {
     amount = Math.max(1, Math.floor(amount));
     await this.withLock(clientId, async () => {
       this.ensureClient(clientId);
-      this.increment(clientId, amount);
+      const before = this.getTokens(clientId);
+      const after = this.increment(clientId, amount);
+      this.logger.log(`Refunded tokens after failure: clientId=${clientId} +${amount} (before=${before} after=${after})`);
     });
   }
 

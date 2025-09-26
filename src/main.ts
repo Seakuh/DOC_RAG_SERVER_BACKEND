@@ -49,6 +49,7 @@ async function bootstrap() {
   // Stripe webhook needs raw body for signature verification
   app.use('/api/v1/stripe/webhook', express.raw({ type: 'application/json' }));
   app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
+  app.use('/webhook', express.raw({ type: 'application/json' }));
 
   // Lightweight alias routes to support /api/* (non-versioned)
   const billing = app.get(BillingService);
@@ -87,21 +88,23 @@ async function bootstrap() {
       if (!priceId) return res.status(500).json({ error: 'Missing STRIPE_PRICE_ID' });
       const quantityRaw = (req.body && req.body.quantity) || undefined;
       const quantity = Math.max(1, Math.floor(quantityRaw ?? 100));
+      logger.log(`(Alias) Create checkout: clientId=${clientId} quantity=${quantity} priceId=${priceId}`);
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         line_items: [
           { price: priceId, quantity },
         ],
-        success_url: `${frontendUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${frontendUrl}/cancel`,
+        success_url: `${frontendUrl}/?success=1&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${frontendUrl}/?canceled=1`,
         client_reference_id: clientId,
         metadata: { clientId, quantity: String(quantity) },
       });
+      logger.log(`(Alias) Checkout created: sessionId=${session.id} url=${session.url}`);
       return res.json({ url: session.url });
     } catch (err) {
       const message = (err as any)?.message || 'Failed to create checkout';
       const payload = process.env.NODE_ENV === 'production' ? { error: 'Failed to create checkout' } : { error: 'Failed to create checkout', detail: message };
-      console.error('Checkout error (alias route):', err);
+      logger.error(`Checkout error (alias route): ${message}`);
       return res.status(500).json(payload);
     }
   });
@@ -113,6 +116,7 @@ async function bootstrap() {
       const secret = process.env.STRIPE_WEBHOOK_SECRET;
       if (!sig || !secret) return res.status(400).send('Missing signature or secret');
       const event = stripe.webhooks.constructEvent(req.body, sig, secret);
+      logger.log(`(Alias) Received webhook event type=${event.type} id=${event.id}`);
       if (event.type === 'checkout.session.completed') {
         const session = event.data.object as Stripe.Checkout.Session;
         const clientId = (session.metadata?.clientId || session.client_reference_id) as string | undefined;
@@ -124,11 +128,44 @@ async function bootstrap() {
           if (sum > 0) quantity = sum;
         } catch {}
         if (clientId && quantity > 0) {
+          logger.log(`(Alias) Fulfill session: id=${session.id} clientId=${clientId} quantity=${quantity}`);
           await billing.safeIncrementFromSession(session.id, clientId, quantity);
         }
       }
       return res.status(200).send('ok');
     } catch (err) {
+      logger.error(`(Alias) Webhook error: ${(err as Error).message}`);
+      return res.status(400).send(`Webhook Error: ${(err as Error).message}`);
+    }
+  });
+
+  // Additional compatibility endpoint for Stripe CLI default path
+  server.post('/webhook', async (req: any, res) => {
+    try {
+      if (!stripe) return res.status(500).send('Stripe not configured');
+      const sig = req.headers['stripe-signature'] as string | undefined;
+      const secret = process.env.STRIPE_WEBHOOK_SECRET;
+      if (!sig || !secret) return res.status(400).send('Missing signature or secret');
+      const event = stripe.webhooks.constructEvent(req.body, sig, secret);
+      logger.log(`(Compat) Received webhook event type=${event.type} id=${event.id}`);
+      if (event.type === 'checkout.session.completed') {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const clientId = (session.metadata?.clientId || session.client_reference_id) as string | undefined;
+        let quantity = Number(session.metadata?.quantity || 0);
+        try {
+          const full = await stripe.checkout.sessions.retrieve(session.id, { expand: ['line_items'] });
+          const items = full.line_items?.data || [];
+          const sum = items.reduce((acc, li) => acc + (li.quantity || 0), 0);
+          if (sum > 0) quantity = sum;
+        } catch {}
+        if (clientId && quantity > 0) {
+          logger.log(`(Compat) Fulfill session: id=${session.id} clientId=${clientId} quantity=${quantity}`);
+          await billing.safeIncrementFromSession(session.id, clientId, quantity);
+        }
+      }
+      return res.status(200).send('ok');
+    } catch (err) {
+      logger.error(`(Compat) Webhook error: ${(err as Error).message}`);
       return res.status(400).send(`Webhook Error: ${(err as Error).message}`);
     }
   });
