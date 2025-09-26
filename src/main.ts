@@ -7,6 +7,8 @@ import * as cors from 'cors';
 import { join } from 'path';
 import { AppModule } from './app.module';
 import * as express from 'express';
+import Stripe from 'stripe';
+import { BillingService } from './billing/billing.service';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -23,7 +25,7 @@ async function bootstrap() {
       origin: true, // Allow all origins in development
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With', 'X-Client-Id'],
       preflightContinue: false,
       optionsSuccessStatus: 204,
     }),
@@ -46,6 +48,90 @@ async function bootstrap() {
 
   // Stripe webhook needs raw body for signature verification
   app.use('/api/v1/stripe/webhook', express.raw({ type: 'application/json' }));
+  app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
+
+  // Lightweight alias routes to support /api/* (non-versioned)
+  const billing = app.get(BillingService);
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  const stripe = stripeKey ? new Stripe(stripeKey) : undefined;
+  const priceId = process.env.STRIPE_PRICE_ID;
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+  const server = app.getHttpAdapter().getInstance() as express.Express;
+
+  server.get('/api/tokens', async (req, res) => {
+    try {
+      const clientId = (req.headers['x-client-id'] as string | undefined) || undefined;
+      try {
+        const id = billing.validateClientIdOrThrow(clientId);
+        billing.ensureClient(id, 5);
+        return res.json({ tokens: billing.getTokens(id) });
+      } catch {
+        return res.status(400).json({ error: 'Invalid X-Client-Id' });
+      }
+    } catch (err) {
+      return res.status(500).json({ error: 'Internal error' });
+    }
+  });
+
+  server.post('/api/checkout', express.json(), async (req, res) => {
+    try {
+      const clientHeader = (req.headers['x-client-id'] as string | undefined) || undefined;
+      let clientId: string;
+      try {
+        clientId = billing.validateClientIdOrThrow(clientHeader);
+      } catch {
+        return res.status(400).json({ error: 'Invalid X-Client-Id' });
+      }
+      if (!stripe) return res.status(500).json({ error: 'Stripe not configured' });
+      if (!priceId) return res.status(500).json({ error: 'Missing STRIPE_PRICE_ID' });
+      const quantityRaw = (req.body && req.body.quantity) || undefined;
+      const quantity = Math.max(1, Math.floor(quantityRaw ?? 100));
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        line_items: [
+          { price: priceId, quantity },
+        ],
+        success_url: `${frontendUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${frontendUrl}/cancel`,
+        client_reference_id: clientId,
+        metadata: { clientId, quantity: String(quantity) },
+      });
+      return res.json({ url: session.url });
+    } catch (err) {
+      const message = (err as any)?.message || 'Failed to create checkout';
+      const payload = process.env.NODE_ENV === 'production' ? { error: 'Failed to create checkout' } : { error: 'Failed to create checkout', detail: message };
+      console.error('Checkout error (alias route):', err);
+      return res.status(500).json(payload);
+    }
+  });
+
+  server.post('/api/stripe/webhook', async (req: any, res) => {
+    try {
+      if (!stripe) return res.status(500).send('Stripe not configured');
+      const sig = req.headers['stripe-signature'] as string | undefined;
+      const secret = process.env.STRIPE_WEBHOOK_SECRET;
+      if (!sig || !secret) return res.status(400).send('Missing signature or secret');
+      const event = stripe.webhooks.constructEvent(req.body, sig, secret);
+      if (event.type === 'checkout.session.completed') {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const clientId = (session.metadata?.clientId || session.client_reference_id) as string | undefined;
+        let quantity = Number(session.metadata?.quantity || 0);
+        try {
+          const full = await stripe.checkout.sessions.retrieve(session.id, { expand: ['line_items'] });
+          const items = full.line_items?.data || [];
+          const sum = items.reduce((acc, li) => acc + (li.quantity || 0), 0);
+          if (sum > 0) quantity = sum;
+        } catch {}
+        if (clientId && quantity > 0) {
+          await billing.safeIncrementFromSession(session.id, clientId, quantity);
+        }
+      }
+      return res.status(200).send('ok');
+    } catch (err) {
+      return res.status(400).send(`Webhook Error: ${(err as Error).message}`);
+    }
+  });
 
   // Swagger documentation
   const config = new DocumentBuilder()

@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UploadedFile, UseInterceptors, BadRequestException, Res } from '@nestjs/common';
+import { Body, Controller, Post, UploadedFile, UseInterceptors, BadRequestException, Res, Req } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ImageGenService } from './image-gen.service';
 import { ImageService } from '../image/image.service';
@@ -6,11 +6,17 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { buildStylingPrompt, getAspectRatio } from './prompt.util';
-import { Response } from 'express';
+import { Request, Response } from 'express';
+import { BillingService } from '../billing/billing.service';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller()
 export class GenerateController {
-  constructor(private readonly svc: ImageGenService, private readonly imageService: ImageService) {}
+  constructor(
+    private readonly svc: ImageGenService,
+    private readonly imageService: ImageService,
+    private readonly billing: BillingService,
+  ) {}
 
   /**
    * POST /api/v1/generate
@@ -20,8 +26,10 @@ export class GenerateController {
    * - bubbles: JSON string array of bubble IDs (required)
    */
   @Post('generate')
+  @Throttle({ short: { limit: 2, ttl: 1000 }, medium: { limit: 20, ttl: 60000 } })
   @UseInterceptors(FileInterceptor('image'))
   async generate(
+    @Req() req: Request,
     @Res() res: Response,
     @Body('bubbles') bubblesJson: string,
     @Body('notes') notes?: string,
@@ -59,6 +67,27 @@ export class GenerateController {
       }
     }
 
+    // Identify client and enforce token balance
+    const clientId = (() => {
+      const val = (req.headers['x-client-id'] || req.headers['X-Client-Id']) as string | undefined;
+      try {
+        return this.billing.validateClientIdOrThrow(val);
+      } catch {
+        throw new BadRequestException('Invalid X-Client-Id');
+      }
+    })();
+    this.billing.ensureClient(clientId, 5);
+
+    // Reserve tokens before generation; refund if generation fails
+    try {
+      await this.billing.reserveTokens(clientId, amount);
+    } catch (e) {
+      if ((e as Error).message === 'INSUFFICIENT_TOKENS') {
+        return res.status(402).json({ error: 'INSUFFICIENT_TOKENS' });
+      }
+      throw e;
+    }
+
     let subjectRef: Buffer | undefined;
     if (file) {
       const uploadsDir = path.join(process.cwd(), 'uploads');
@@ -69,17 +98,22 @@ export class GenerateController {
       fs.writeFileSync(full, file.buffer);
       subjectRef = file.buffer;
     }
-
-    const images = await this.svc.generateImages(prompt, amount, aspectRatio, subjectRef);
-    const mirrored: string[] = [];
-    for (const url of images) {
-      try {
-        const m = await this.imageService.mirrorRemoteToGenerated(url);
-        mirrored.push(m);
-      } catch (e) {
-        mirrored.push(url);
+    try {
+      const images = await this.svc.generateImages(prompt, amount, aspectRatio, subjectRef);
+      const mirrored: string[] = [];
+      for (const url of images) {
+        try {
+          const m = await this.imageService.mirrorRemoteToGenerated(url);
+          mirrored.push(m);
+        } catch (e) {
+          mirrored.push(url);
+        }
       }
+      const tokens = this.billing.getTokens(clientId);
+      return (res as Response).json({ images: mirrored, tokens });
+    } catch (err) {
+      await this.billing.refundTokens(clientId, amount);
+      throw err;
     }
-    return (res as Response).json({ images: mirrored });
   }
 }

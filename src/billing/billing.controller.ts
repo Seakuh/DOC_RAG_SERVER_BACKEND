@@ -1,31 +1,16 @@
-import { Body, Controller, Get, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, Res, BadRequestException } from '@nestjs/common';
 import { BillingService } from './billing.service';
 import Stripe from 'stripe';
 import { Request, Response } from 'express';
-import * as crypto from 'crypto';
+import { Throttle } from '@nestjs/throttler';
 
-function parseCookies(header?: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!header) return out;
-  header.split(';').forEach((pair) => {
-    const idx = pair.indexOf('=');
-    if (idx > -1) {
-      const key = pair.slice(0, idx).trim();
-      const val = decodeURIComponent(pair.slice(idx + 1).trim());
-      out[key] = val;
-    }
-  });
-  return out;
-}
-
-function ensureUid(req: Request, res: Response): string {
-  const cookies = parseCookies(req.headers.cookie);
-  let uid = cookies['uid'];
-  if (!uid) {
-    uid = crypto.randomUUID();
-    res.cookie('uid', uid, { httpOnly: true, sameSite: 'lax' });
+function readClientId(req: Request, billing: BillingService): string {
+  const hdr = (req.headers['x-client-id'] || req.headers['X-Client-Id']) as string | undefined;
+  try {
+    return billing.validateClientIdOrThrow(hdr);
+  } catch {
+    throw new BadRequestException('Invalid X-Client-Id');
   }
-  return uid;
 }
 
 @Controller()
@@ -40,44 +25,55 @@ export class BillingController {
   }
 
   @Get('tokens')
+  @Throttle({ short: { limit: 5, ttl: 1000 } })
   async getTokens(@Req() req: Request, @Res() res: Response) {
-    const uid = ensureUid(req, res);
-    const tokens = this.billing.getTokens(uid);
+    const clientId = readClientId(req, this.billing);
+    this.billing.ensureClient(clientId, 5);
+    const tokens = this.billing.getTokens(clientId);
     return res.json({ tokens });
   }
 
   @Post('checkout')
+  @Throttle({ short: { limit: 3, ttl: 1000 }, medium: { limit: 20, ttl: 60000 } })
   async createCheckout(
     @Req() req: Request,
     @Res() res: Response,
     @Body() body: { quantity?: number },
   ) {
-    const uid = ensureUid(req, res);
-    if (!this.stripe) {
-      return res.status(500).json({ error: 'Stripe not configured' });
+    const clientId = readClientId(req, this.billing);
+    try {
+      if (!this.stripe) {
+        return res.status(500).json({ error: 'Stripe not configured' });
+      }
+      const priceId = process.env.STRIPE_PRICE_ID;
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const quantity = Math.max(1, Math.floor(body?.quantity ?? 100));
+
+      if (!priceId) {
+        return res.status(500).json({ error: 'Missing STRIPE_PRICE_ID' });
+      }
+
+      const session = await this.stripe.checkout.sessions.create({
+        mode: 'payment',
+        line_items: [
+          {
+            price: priceId,
+            quantity,
+          },
+        ],
+        success_url: `${frontendUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${frontendUrl}/cancel`,
+        client_reference_id: clientId,
+        metadata: { clientId, quantity: String(quantity) },
+      });
+
+      return res.json({ url: session.url });
+    } catch (err) {
+      const message = (err as any)?.message || 'Failed to create checkout';
+      // Avoid leaking details in prod
+      const payload = process.env.NODE_ENV === 'production' ? { error: 'Failed to create checkout' } : { error: 'Failed to create checkout', detail: message };
+      console.error('Checkout error:', err);
+      return res.status(500).json(payload);
     }
-    const priceId = process.env.STRIPE_PRICE_ID;
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const quantity = Math.max(1, Math.floor(body?.quantity ?? 10));
-
-    if (!priceId) {
-      return res.status(500).json({ error: 'Missing STRIPE_PRICE_ID' });
-    }
-
-    const session = await this.stripe.checkout.sessions.create({
-      mode: 'payment',
-      line_items: [
-        {
-          price: priceId,
-          quantity,
-        },
-      ],
-      success_url: `${frontendUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${frontendUrl}/cancel`,
-      client_reference_id: uid,
-      metadata: { uid, quantity: String(quantity) },
-    });
-
-    return res.json({ url: session.url });
   }
 }

@@ -2,6 +2,7 @@ import { Controller, Post, Req, Res } from '@nestjs/common';
 import { Request, Response } from 'express';
 import Stripe from 'stripe';
 import { BillingService } from './billing.service';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('stripe')
 export class StripeWebhookController {
@@ -13,6 +14,7 @@ export class StripeWebhookController {
   }
 
   @Post('webhook')
+  @Throttle({ long: { limit: 100, ttl: 3600000 } })
   async handle(@Req() req: Request, @Res() res: Response) {
     try {
       if (!this.stripe) return res.status(500).send('Stripe not configured');
@@ -25,7 +27,7 @@ export class StripeWebhookController {
 
       if (event.type === 'checkout.session.completed') {
         const session = event.data.object as Stripe.Checkout.Session;
-        const uid = (session.client_reference_id || session.metadata?.uid) as string | undefined;
+        const clientId = (session.metadata?.clientId || session.client_reference_id) as string | undefined;
         let quantity = Number(session.metadata?.quantity || 0);
         try {
           const full = await this.stripe.checkout.sessions.retrieve(session.id, { expand: ['line_items'] });
@@ -34,8 +36,8 @@ export class StripeWebhookController {
           if (sum > 0) quantity = sum;
         } catch {}
 
-        if (uid && quantity > 0) {
-          this.billing.increment(uid, quantity);
+        if (clientId && quantity > 0) {
+          await this.billing.safeIncrementFromSession(session.id, clientId, quantity);
         }
       }
 

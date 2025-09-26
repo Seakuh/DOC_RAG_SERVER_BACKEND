@@ -150,13 +150,19 @@ Swagger Dokumentation: `http://localhost:3000/api`
 - `GET /api/v1/query/health` - Service Health Check
 
 ### Billing & Tokens
-- `GET /api/v1/tokens` – Aktuelles Token-Guthaben (Cookie-basierte Session)
-- `POST /api/v1/checkout` – Stripe Checkout Session erstellen `{ quantity?: number }`
-- `POST /api/v1/stripe/webhook` – Stripe Fulfillment Webhook (signiert)
+- `GET /api/v1/tokens` – Aktuelles Token-Guthaben für anonymen Client (Header `X-Client-Id`)
+- `POST /api/v1/checkout` – Stripe Checkout Session erstellen `{ quantity?: number }` (Header `X-Client-Id`)
+- `POST /api/v1/stripe/webhook` – Stripe Fulfillment Webhook (signiert, idempotent)
+
+Hinweise:
+- Clients identifizieren sich anonym via `X-Client-Id` (8–64 Zeichen, `[A-Za-z0-9_-]`). Keine PII speichern.
+- Neue Clients erhalten automatisch 5 Start-Tokens.
+- Beim Checkout werden `clientId` und `quantity` in Stripe `metadata` gespeichert.
+- Nach erfolgreicher Zahlung erhöht der Webhook das Guthaben idempotent.
 
 ### Image Generation
 - `POST /api/v1/images/generate` – Text-/Image-to-Image via Replicate (minimax/image-01)
-- `POST /api/v1/generate` – Preset-basierte Generierung via `bubbles[]` + optional `notes` + optional `image`
+- `POST /api/v1/generate` – Preset-basierte Generierung via `bubbles[]` + optional `notes` + optional `image` (Header `X-Client-Id`, Tokenabzug je Bild; bei `framing=collection` Standardmenge 3)
 - `GET /api/v1/images/latest-random?limit=20` – Neueste generierte Bilder (vom Image-Server), zufällig gemischt
 - `GET /api/v1/images/random` – 20 zufällige generierte Bilder
 
