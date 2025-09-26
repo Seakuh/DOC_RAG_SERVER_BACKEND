@@ -157,6 +157,8 @@ Swagger Dokumentation: `http://localhost:3000/api`
 ### Image Generation
 - `POST /api/v1/images/generate` – Text-/Image-to-Image via Replicate (minimax/image-01)
 - `POST /api/v1/generate` – Preset-basierte Generierung via `bubbles[]` + optional `notes` + optional `image`
+- `GET /api/v1/images/latest-random?limit=20` – Neueste generierte Bilder (vom Image-Server), zufällig gemischt
+- `GET /api/v1/images/random` – 20 zufällige generierte Bilder
 
 ### Document Management
 - `POST /api/v1/documents/upload` - Dokument hochladen
@@ -226,7 +228,7 @@ http -f POST :3000/api/v1/images/generate \
   image@./example.jpg
 
 # Erwartete Antwort:
-# { "images": ["https://replicate.delivery/.../output_0.jpeg", "..."] }
+# { "images": ["https://hel1.your-objectstorage.com/<bucket>/generated/<file>.jpg", "..."] }
 ```
 
 2) Preset-driven Endpoint mit bubbles + notes (+ optional amount, Default 1), plus Styling-Optionen (gender, hairstyle, hairColor, framing)
@@ -244,6 +246,22 @@ http -f POST :3000/api/v1/generate \
   image@./reference.jpg
 
 # Antwort: { "images": ["https://...", ...], "bubbles": ["editorial_studio", "gym_fit"] }
+```
+
+3) Neueste generierte Bilder (random)
+
+```bash
+http GET :3000/api/v1/images/latest-random limit==24
+
+# Antwort: { "images": ["https://hel1.your-objectstorage.com/<bucket>/generated/<file>.jpg", ...] }
+```
+
+4) 20 zufällige generierte Bilder
+
+```bash
+http GET :3000/api/v1/images/random
+
+# Antwort: { "images": ["https://hel1.your-objectstorage.com/<bucket>/generated/<file>.jpg", ...] }
 ```
 
 TypeScript/JS Client-Beispiel

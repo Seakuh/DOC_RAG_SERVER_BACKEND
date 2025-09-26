@@ -63,7 +63,7 @@ export const baseMods =
   'photographic, ultra-detailed facial features, flattering light, crisp focus, natural skin texture, subtle color grading, editorial quality, minimalistic modern aesthetic, clean composition, shallow depth of field, professional portrait lens';
 
 export function buildPrompt(ids: string[], notes?: string): string {
-  const selectedParts = ids.map((id) => bubbleMap[id]).filter(Boolean);
+  const selectedParts = ids.map(id => bubbleMap[id]).filter(Boolean);
   const parts = [baseMods, ...selectedParts];
   if (notes?.trim()) {
     parts.push(`User notes: ${notes.trim()}`);
@@ -84,8 +84,8 @@ export const hairStyleMap: Record<string, string> = {
 };
 
 export function bubbleLabels(ids: string[]): string[] {
-  const index = new Map(bubbles.map((b) => [b.id, b.label] as const));
-  return ids.map((id) => index.get(id) || id);
+  const index = new Map(bubbles.map(b => [b.id, b.label] as const));
+  return ids.map(id => index.get(id) || id);
 }
 
 export function buildStylingPrompt(
@@ -101,7 +101,11 @@ export function buildStylingPrompt(
   } = {},
 ): string {
   const gender = (opts.gender || 'unspecified').trim();
-  const hairstyle = (opts.hairstyleLabel || (opts.hairstyleId ? hairStyleMap[opts.hairstyleId] : undefined) || 'original hairstyle').trim();
+  const hairstyle = (
+    opts.hairstyleLabel ||
+    (opts.hairstyleId ? hairStyleMap[opts.hairstyleId] : undefined) ||
+    'original hairstyle'
+  ).trim();
   const labels = bubbleLabels(ids);
   const notes = (opts.notes && opts.notes.trim()) || 'no extra notes';
   const from = opts.hairColorFrom?.trim();
@@ -122,17 +126,21 @@ export function buildStylingPrompt(
     framing === 'face'
       ? 'Crop to a close-up face portrait (head and a bit of shoulders).'
       : framing === 'full_body'
-      ? 'Show the full body from head to toe.'
-      : framing === 'collection'
-      ? 'Generate three variants: (1) close-up face, (2) half-body (waist-up), and (3) full body.'
-      : undefined,
+        ? 'full body portrait, head to toe, perfectly framed, professional photography, entire body visible, sharp focus, well-lit, high resolution, natural skin texture, subtle color grading, editorial quality, minimalistic modern aesthetic, clean composition, shallow depth of field, professional portrait lens'
+        : framing === 'collection'
+          ? 'Generate three variants: (1) close-up face, (2) half-body (waist-up), and (3) full body.'
+          : undefined,
     'Hair color:',
     hairColorLine,
     `Additional style bubbles: ${labels.length ? labels.join(', ') : 'none'}.`,
     `User notes: ${notes}.`,
     'Output: high-resolution, realistic portrait, balanced lighting, natural skin texture.',
     baseMods,
-  ].filter(Boolean).join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  console.log(prompt);
 
   return prompt;
 }

@@ -1,6 +1,7 @@
 import { Body, Controller, Post, UploadedFile, UseInterceptors, BadRequestException, Res } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ImageGenService } from './image-gen.service';
+import { ImageService } from '../image/image.service';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -9,7 +10,7 @@ import { Response } from 'express';
 
 @Controller()
 export class GenerateController {
-  constructor(private readonly svc: ImageGenService) {}
+  constructor(private readonly svc: ImageGenService, private readonly imageService: ImageService) {}
 
   /**
    * POST /api/v1/generate
@@ -70,6 +71,15 @@ export class GenerateController {
     }
 
     const images = await this.svc.generateImages(prompt, amount, aspectRatio, subjectRef);
-    return (res as Response).json({ images });
+    const mirrored: string[] = [];
+    for (const url of images) {
+      try {
+        const m = await this.imageService.mirrorRemoteToGenerated(url);
+        mirrored.push(m);
+      } catch (e) {
+        mirrored.push(url);
+      }
+    }
+    return (res as Response).json({ images: mirrored });
   }
 }
