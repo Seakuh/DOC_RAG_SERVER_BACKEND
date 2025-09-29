@@ -9,20 +9,85 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    env:
+      SERVER_USER: root
+      SERVER_HOST: 167.235.200.242
+      SERVER_DIR: /var/www/vibestylerai
+      APP_DIR: /var/www/vibestylerai # hier liegt deine package.json
+      BRANCH: vibestylerai-main
+      REPO_URL: git@github.com:Seakuh/vibestylerai.git # <-- anpassen!
+      APP_NAME: vibestylerai
+      NS: vibestylerai
+      START_CMD: "npm run start -- -p 3007" # oder "npm run start:prod"
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout (optional)
+        uses: actions/checkout@v4
 
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.7.0
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
 
+      - name: Trust server host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.SERVER_HOST }} >> ~/.ssh/known_hosts
+
       - name: Deploy to server
         run: |
-          ssh -o StrictHostKeyChecking=no root@167.235.200.242 << 'EOF'
-            cd /var/www/vibestylerai
-            git pull origin vibestylerai-main
-            npm install --production
-            pm2 restart vibestylerai || pm2 start npm --name vibestylerai -- run start -- -p 3007
+          ssh ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} << 'EOF'
+            set -euo pipefail
+            REPO_URL="${REPO_URL}"; BRANCH="${BRANCH}"
+            SERVER_DIR="${SERVER_DIR}"; APP_DIR="${APP_DIR}"
+            APP_NAME="${APP_NAME}"; NS="${NS}"; START_CMD="${START_CMD}"
+
+            mkdir -p "$SERVER_DIR"
+
+            if [ ! -d "$SERVER_DIR/.git" ]; then
+              echo "➡️  Erste Installation (clone)"
+              git clone --branch "$BRANCH" "$REPO_URL" "$SERVER_DIR"
+            else
+              echo "➡️  Update bestehendes Repo"
+              cd "$SERVER_DIR"
+              git fetch origin "$BRANCH"
+              git checkout "$BRANCH"
+              git reset --hard "origin/$BRANCH"
+            fi
+
+            cd "$APP_DIR"
+
+            # Node & PM2 sicherstellen (ohne andere Apps anzufassen)
+            if ! command -v node >/dev/null 2>&1; then
+              echo "📦 Installiere Node.js"
+              apt-get update
+              apt-get install -y curl
+              curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+              apt-get install -y nodejs
+            fi
+            if ! command -v pm2 >/dev/null 2>&1; then
+              echo "📦 Installiere PM2"
+              npm i -g pm2
+            fi
+
+            echo "📦 Installiere Dependencies"
+            if [ -f package-lock.json ]; then
+              npm ci --omit=dev || npm ci
+            else
+              npm install --production || npm install
+            fi
+
+            echo "⚒️  Build falls nötig"
+            npm run build || true
+
+            echo "🚀 Starte/Reload PM2"
+            if pm2 describe "$APP_NAME" --namespace "$NS" >/dev/null 2>&1; then
+              pm2 reload "$APP_NAME" --namespace "$NS" --update-env || \
+              pm2 restart "$APP_NAME" --namespace "$NS" --update-env
+            else
+              pm2 start bash --name "$APP_NAME" --namespace "$NS" -- -lc "cd $APP_DIR && $START_CMD"
+            fi
+
+            echo "💾 Speichere PM2 Prozessliste"
+            pm2 save
           EOF
