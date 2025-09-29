@@ -1,13 +1,12 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import * as cors from 'cors';
-import { join } from 'path';
-import { AppModule } from './app.module';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as express from 'express';
+import { join } from 'path';
 import Stripe from 'stripe';
+import { AppModule } from './app.module';
 import { BillingService } from './billing/billing.service';
 
 async function bootstrap() {
@@ -20,16 +19,16 @@ async function bootstrap() {
   app.useStaticAssets(join(__dirname, '..', 'public'));
 
   // Enable CORS with more permissive settings for development
-  app.use(
-    cors({
-      origin: true, // Allow all origins in development
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With', 'X-Client-Id'],
-      preflightContinue: false,
-      optionsSuccessStatus: 204,
-    }),
-  );
+  // app.use(
+  //   cors({
+  //     origin: true, // Allow all origins in development
+  //     credentials: true,
+  //     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  //     allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With', 'X-Client-Id'],
+  //     preflightContinue: false,
+  //     optionsSuccessStatus: 204,
+  //   }),
+  // );
 
   // Global validation pipe
   app.useGlobalPipes(
@@ -88,12 +87,12 @@ async function bootstrap() {
       if (!priceId) return res.status(500).json({ error: 'Missing STRIPE_PRICE_ID' });
       const quantityRaw = (req.body && req.body.quantity) || undefined;
       const quantity = Math.max(1, Math.floor(quantityRaw ?? 100));
-      logger.log(`(Alias) Create checkout: clientId=${clientId} quantity=${quantity} priceId=${priceId}`);
+      logger.log(
+        `(Alias) Create checkout: clientId=${clientId} quantity=${quantity} priceId=${priceId}`,
+      );
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
-        line_items: [
-          { price: priceId, quantity },
-        ],
+        line_items: [{ price: priceId, quantity }],
         success_url: `${frontendUrl}/?success=1&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${frontendUrl}/?canceled=1`,
         client_reference_id: clientId,
@@ -103,7 +102,10 @@ async function bootstrap() {
       return res.json({ url: session.url });
     } catch (err) {
       const message = (err as any)?.message || 'Failed to create checkout';
-      const payload = process.env.NODE_ENV === 'production' ? { error: 'Failed to create checkout' } : { error: 'Failed to create checkout', detail: message };
+      const payload =
+        process.env.NODE_ENV === 'production'
+          ? { error: 'Failed to create checkout' }
+          : { error: 'Failed to create checkout', detail: message };
       logger.error(`Checkout error (alias route): ${message}`);
       return res.status(500).json(payload);
     }
@@ -119,16 +121,22 @@ async function bootstrap() {
       logger.log(`(Alias) Received webhook event type=${event.type} id=${event.id}`);
       if (event.type === 'checkout.session.completed') {
         const session = event.data.object as Stripe.Checkout.Session;
-        const clientId = (session.metadata?.clientId || session.client_reference_id) as string | undefined;
+        const clientId = (session.metadata?.clientId || session.client_reference_id) as
+          | string
+          | undefined;
         let quantity = Number(session.metadata?.quantity || 0);
         try {
-          const full = await stripe.checkout.sessions.retrieve(session.id, { expand: ['line_items'] });
+          const full = await stripe.checkout.sessions.retrieve(session.id, {
+            expand: ['line_items'],
+          });
           const items = full.line_items?.data || [];
           const sum = items.reduce((acc, li) => acc + (li.quantity || 0), 0);
           if (sum > 0) quantity = sum;
         } catch {}
         if (clientId && quantity > 0) {
-          logger.log(`(Alias) Fulfill session: id=${session.id} clientId=${clientId} quantity=${quantity}`);
+          logger.log(
+            `(Alias) Fulfill session: id=${session.id} clientId=${clientId} quantity=${quantity}`,
+          );
           await billing.safeIncrementFromSession(session.id, clientId, quantity);
         }
       }
@@ -150,16 +158,22 @@ async function bootstrap() {
       logger.log(`(Compat) Received webhook event type=${event.type} id=${event.id}`);
       if (event.type === 'checkout.session.completed') {
         const session = event.data.object as Stripe.Checkout.Session;
-        const clientId = (session.metadata?.clientId || session.client_reference_id) as string | undefined;
+        const clientId = (session.metadata?.clientId || session.client_reference_id) as
+          | string
+          | undefined;
         let quantity = Number(session.metadata?.quantity || 0);
         try {
-          const full = await stripe.checkout.sessions.retrieve(session.id, { expand: ['line_items'] });
+          const full = await stripe.checkout.sessions.retrieve(session.id, {
+            expand: ['line_items'],
+          });
           const items = full.line_items?.data || [];
           const sum = items.reduce((acc, li) => acc + (li.quantity || 0), 0);
           if (sum > 0) quantity = sum;
         } catch {}
         if (clientId && quantity > 0) {
-          logger.log(`(Compat) Fulfill session: id=${session.id} clientId=${clientId} quantity=${quantity}`);
+          logger.log(
+            `(Compat) Fulfill session: id=${session.id} clientId=${clientId} quantity=${quantity}`,
+          );
           await billing.safeIncrementFromSession(session.id, clientId, quantity);
         }
       }
