@@ -10,15 +10,15 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # ↴ Server/Projekt
+      # Server/Projekt
       SERVER_USER: root
       SERVER_HOST: 167.235.200.242
       SERVER_DIR: /var/www/vibestylerai # Zielordner auf dem Server
-      APP_DIR: /var/www/vibestylerai # Ordner mit package.json (ggf. anpassen)
+      APP_DIR: /var/www/vibestylerai # Ordner mit package.json (ggf. anpassen, z.B. /var/www/vibestylerai/backend)
       APP_NAME: vibestylerai
       NS: vibestylerai
 
-      # ↴ App-Start (PORT per ENV, Start über start:prod)
+      # App-Start (PORT per ENV, Start über start:prod)
       PORT: "3007"
       START_CMD: "npm run start:prod"
 
@@ -30,7 +30,7 @@ jobs:
           repository: Seakuh/DOC_RAG_SERVER_BACKEND
           ref: vibestylerai-main
 
-      # 2) SSH-Key für Serverzugriff laden (SSH_KEY in Repo-Secrets hinterlegen)
+      # 2) SSH-Key für Serverzugriff laden (SSH_KEY als Secret im Repo)
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.7.0
         with:
@@ -46,7 +46,7 @@ jobs:
           ssh-keyscan -H "${{ env.SERVER_HOST }}" 2>/dev/null >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      # 4) Code auf den Server syncen (schnell & sicher; kein Git auf dem Server nötig)
+      # 4) Code auf den Server syncen (kein Git auf dem Server nötig)
       - name: Upload code to server (rsync)
         shell: bash
         run: |
@@ -63,48 +63,20 @@ jobs:
       - name: Install, build and start on server
         shell: bash
         run: |
-          echo "🚀 PM2 Start/Reload (mit ENV)"
-          if pm2 describe "$APP_NAME" --namespace "$NS" >/dev/null 2>&1; then
-            HETZNER_ACCESS_KEY='${{ secrets.HETZNER_ACCESS_KEY }}' \
-            HETZNER_BUCKET_NAME='${{ secrets.HETZNER_BUCKET_NAME }}' \
-            HETZNER_SECRET_KEY='${{ secrets.HETZNER_SECRET_KEY }}' \
-            MONGODB_URI='${{ secrets.MONGODB_URI }}' \
-            REPLICATE_API_TOKEN='${{ secrets.REPLICATE_API_TOKEN }}' \
-            STRIPE_PRICE_ID='${{ secrets.STRIPE_PRICE_ID }}' \
-            STRIPE_SECRET_KEY='${{ secrets.STRIPE_SECRET_KEY }}' \
-            STRIPE_WEBHOOK_SECRET='${{ secrets.STRIPE_WEBHOOK_SECRET }}' \
-            PORT='${{ env.PORT }}' \
-            NODE_ENV=production \
-            pm2 restart "$APP_NAME" --namespace "$NS" --update-env
-          else
-            HETZNER_ACCESS_KEY='${{ secrets.HETZNER_ACCESS_KEY }}' \
-            HETZNER_BUCKET_NAME='${{ secrets.HETZNER_BUCKET_NAME }}' \
-            HETZNER_SECRET_KEY='${{ secrets.HETZNER_SECRET_KEY }}' \
-            MONGODB_URI='${{ secrets.MONGODB_URI }}' \
-            REPLICATE_API_TOKEN='${{ secrets.REPLICATE_API_TOKEN }}' \
-            STRIPE_PRICE_ID='${{ secrets.STRIPE_PRICE_ID }}' \
-            STRIPE_SECRET_KEY='${{ secrets.STRIPE_SECRET_KEY }}' \
-            STRIPE_WEBHOOK_SECRET='${{ secrets.STRIPE_WEBHOOK_SECRET }}' \
-            PORT='${{ env.PORT }}' \
-            NODE_ENV=production \
-            pm2 start bash --name "$APP_NAME" --namespace "$NS" -- -lc "cd $APP_DIR && $START_CMD"
-          fi
-                  
-          pm2 save
-                  
-          set -euo pipefail
           ssh -T ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} << 'EOF'
             set -euo pipefail
 
+            # ----- Variablen aus Actions -----
             APP_DIR="${{ env.APP_DIR }}"
             APP_NAME="${{ env.APP_NAME }}"
             NS="${{ env.NS }}"
             START_CMD="${{ env.START_CMD }}"
             PORT="${{ env.PORT }}"
 
+            # ----- In Projektordner wechseln -----
             cd "$APP_DIR"
 
-            # Node & PM2 sicherstellen (ohne andere Apps anzufassen)
+            # ----- Node & PM2 sicherstellen -----
             if ! command -v node >/dev/null 2>&1; then
               echo "📦 Installiere Node.js"
               apt-get update
@@ -117,7 +89,7 @@ jobs:
               npm i -g pm2
             fi
 
-            # Dev-Dependencies installieren (für Nest-Build notwendig)
+            # ----- Dependencies inkl. dev für Nest-Build -----
             echo "📦 Dependencies (inkl. dev) installieren"
             if [ -f package-lock.json ]; then
               npm ci
@@ -125,22 +97,40 @@ jobs:
               npm install
             fi
 
-            # Build (Nest -> dist/)
+            # ----- Build (Nest -> dist/) -----
             echo "⚒️  Build"
             npm run build
 
-            # Dev-Dependencies entfernen für schlankes Runtime-Image
+            # ----- Dev-Dependencies entfernen für Produktion -----
             echo "🧹 Prune devDependencies"
             npm prune --omit=dev || true
 
-            # Start/Reload NUR diese App & in eigenem Namespace
-            echo "🚀 PM2 Start/Reload"
+            # ----- PM2 Start/Reload NUR diese App & Namespace, inkl. ENV/Secrets -----
+            echo "🚀 PM2 Start/Reload (mit ENV)"
             if pm2 describe "$APP_NAME" --namespace "$NS" >/dev/null 2>&1; then
-              # env aktualisieren und Prozess neu starten
-              PORT="$PORT" pm2 restart "$APP_NAME" --namespace "$NS" --update-env
+              HETZNER_ACCESS_KEY='${{ secrets.HETZNER_ACCESS_KEY }}' \
+              HETZNER_BUCKET_NAME='${{ secrets.HETZNER_BUCKET_NAME }}' \
+              HETZNER_SECRET_KEY='${{ secrets.HETZNER_SECRET_KEY }}' \
+              MONGODB_URI='${{ secrets.MONGODB_URI }}' \
+              REPLICATE_API_TOKEN='${{ secrets.REPLICATE_API_TOKEN }}' \
+              STRIPE_PRICE_ID='${{ secrets.STRIPE_PRICE_ID }}' \
+              STRIPE_SECRET_KEY='${{ secrets.STRIPE_SECRET_KEY }}' \
+              STRIPE_WEBHOOK_SECRET='${{ secrets.STRIPE_WEBHOOK_SECRET }}' \
+              PORT="$PORT" \
+              NODE_ENV=production \
+              pm2 restart "$APP_NAME" --namespace "$NS" --update-env
             else
-              # Erster Start: korrekter cwd + ENV PORT
-              PORT="$PORT" pm2 start bash --name "$APP_NAME" --namespace "$NS" -- -lc "cd $APP_DIR && $START_CMD"
+              HETZNER_ACCESS_KEY='${{ secrets.HETZNER_ACCESS_KEY }}' \
+              HETZNER_BUCKET_NAME='${{ secrets.HETZNER_BUCKET_NAME }}' \
+              HETZNER_SECRET_KEY='${{ secrets.HETZNER_SECRET_KEY }}' \
+              MONGODB_URI='${{ secrets.MONGODB_URI }}' \
+              REPLICATE_API_TOKEN='${{ secrets.REPLICATE_API_TOKEN }}' \
+              STRIPE_PRICE_ID='${{ secrets.STRIPE_PRICE_ID }}' \
+              STRIPE_SECRET_KEY='${{ secrets.STRIPE_SECRET_KEY }}' \
+              STRIPE_WEBHOOK_SECRET='${{ secrets.STRIPE_WEBHOOK_SECRET }}' \
+              PORT="$PORT" \
+              NODE_ENV=production \
+              pm2 start bash --name "$APP_NAME" --namespace "$NS" -- -lc "cd $APP_DIR && $START_CMD"
             fi
 
             pm2 save
