@@ -65,7 +65,7 @@ async function bootstrap() {
       const clientId = (req.headers['x-client-id'] as string | undefined) || undefined;
       try {
         const id = billing.validateClientIdOrThrow(clientId);
-        billing.ensureClient(id, 5);
+        billing.ensureClient(id);
         return res.json({ tokens: billing.getTokens(id) });
       } catch {
         return res.status(400).json({ error: 'Invalid X-Client-Id' });

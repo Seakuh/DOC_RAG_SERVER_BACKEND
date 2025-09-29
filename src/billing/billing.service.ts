@@ -31,7 +31,7 @@ export class BillingService {
     }
   }
 
-  ensureClient(clientId: string, initial = 5) {
+  ensureClient(clientId: string, initial = 0) {
     if (!this.balances.has(clientId)) {
       this.balances.set(clientId, Math.max(0, Math.floor(initial)));
     }
