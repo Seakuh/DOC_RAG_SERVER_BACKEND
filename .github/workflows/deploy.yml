@@ -116,6 +116,7 @@ jobs:
               STRIPE_PRICE_ID='${{ secrets.STRIPE_PRICE_ID }}' \
               STRIPE_SECRET_KEY='${{ secrets.STRIPE_SECRET_KEY }}' \
               STRIPE_WEBHOOK_SECRET='${{ secrets.STRIPE_WEBHOOK_SECRET }}' \
+              OPENAI_API_KEY='${{ secrets.OPENAI_API_KEY }}' \
               PORT="$PORT" \
               NODE_ENV=production \
               pm2 restart "$APP_NAME" --namespace "$NS" --update-env
