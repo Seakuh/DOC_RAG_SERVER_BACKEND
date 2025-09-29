@@ -18,28 +18,25 @@ async function bootstrap() {
   // Serve static files
   app.useStaticAssets(join(__dirname, '..', 'public'));
 
-  // Enable CORS with more permissive settings for development
-  app.enableCors({
-    origin: [
-      /^https?:\/\/(localhost|127\.0\.0\.1):5173$/,
-      /^https:\/\/(www\.)?vibestylerai\.com$/,
-      /^https:\/\/localhost:5173$/,
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: [
-      'Authorization',
-      'Content-Type',
-      'Accept',
-      'Origin',
-      'X-Requested-With',
-      'X-Client-Id',
-      'If-Modified-Since',
-      'Cache-Control',
-      'Range',
-    ],
-    maxAge: 86400,
-  });
+  // app.enableCors({
+  //   origin: [
+  //     'http://192.168.6.143:5173',
+  //     'http://192.168.150.143:5173',
+  //     'http://localhost:5173',
+  //     'http://localhost:5174',
+  //     'http://localhost:3000',
+  //     'https://www.retromountainphangan.com',
+  //     'https://avanti-kollektiv.de',
+  //     'https://www.event-scanner.com',
+  //     'https://api.event-scanner.com',
+  //     'https://api.avanti-kollektiv.com',
+  //     'https://vartakt.com',
+  //     'https://www.vibestylerai.com',
+  //   ],
+  //   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  //   allowedHeaders: ['Content-Type', 'Authorization'],
+  //   credentials: true,
+  // });
 
   // Global validation pipe
   app.useGlobalPipes(
