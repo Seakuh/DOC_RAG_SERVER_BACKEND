@@ -10,78 +10,108 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      # ↴ Server/Projekt
       SERVER_USER: root
       SERVER_HOST: 167.235.200.242
-      SERVER_DIR: /var/www/vibestylerai # Zielordner auf Server
-      APP_DIR: /var/www/vibestylerai # Ordner mit package.json
+      SERVER_DIR: /var/www/vibestylerai # Zielordner auf dem Server
+      APP_DIR: /var/www/vibestylerai # Ordner mit package.json (ggf. anpassen)
       APP_NAME: vibestylerai
       NS: vibestylerai
-      START_CMD: "npm run start -- -p 3007" # oder "npm run start:prod"
+
+      # ↴ App-Start (PORT per ENV, Start über start:prod)
+      PORT: "3007"
+      START_CMD: "npm run start:prod"
 
     steps:
+      # 1) Code aus deinem Repo auschecken
       - name: Checkout
         uses: actions/checkout@v4
         with:
           repository: Seakuh/DOC_RAG_SERVER_BACKEND
           ref: vibestylerai-main
 
+      # 2) SSH-Key für Serverzugriff laden (SSH_KEY in Repo-Secrets hinterlegen)
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.7.0
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
 
+      # 3) Server Host Key trusten (verhindert Interactive Prompt)
       - name: Trust server host key
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
           ssh-keyscan -H "${{ env.SERVER_HOST }}" 2>/dev/null >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
 
-      - name: Upload code to server
+      # 4) Code auf den Server syncen (schnell & sicher; kein Git auf dem Server nötig)
+      - name: Upload code to server (rsync)
+        shell: bash
         run: |
+          set -euo pipefail
           ssh -T ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} "mkdir -p '${{ env.SERVER_DIR }}'"
           rsync -az --delete \
             --exclude '.git' \
             --exclude 'node_modules' \
             --exclude '.env' \
+            --exclude 'npm-debug.log' \
             ./ ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }}:${{ env.SERVER_DIR }}/
 
-      - name: Install & start on server
+      # 5) Install, Build, Prune & Start/Reload via PM2 (nur diese App)
+      - name: Install, build and start on server
+        shell: bash
         run: |
+          set -euo pipefail
           ssh -T ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} << 'EOF'
             set -euo pipefail
+
             APP_DIR="${{ env.APP_DIR }}"
             APP_NAME="${{ env.APP_NAME }}"
             NS="${{ env.NS }}"
             START_CMD="${{ env.START_CMD }}"
+            PORT="${{ env.PORT }}"
 
             cd "$APP_DIR"
 
-            # Node & PM2 sicherstellen
+            # Node & PM2 sicherstellen (ohne andere Apps anzufassen)
             if ! command -v node >/dev/null 2>&1; then
+              echo "📦 Installiere Node.js"
               apt-get update
               apt-get install -y curl
               curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
               apt-get install -y nodejs
             fi
             if ! command -v pm2 >/dev/null 2>&1; then
+              echo "📦 Installiere PM2"
               npm i -g pm2
             fi
 
-            echo "📦 Dependencies installieren"
+            # Dev-Dependencies installieren (für Nest-Build notwendig)
+            echo "📦 Dependencies (inkl. dev) installieren"
             if [ -f package-lock.json ]; then
-              npm ci --omit=dev || npm ci
+              npm ci
             else
-              npm install --production || npm install
+              npm install
             fi
 
-            echo "⚒️ Build (falls vorhanden)"
-            npm run build || true
+            # Build (Nest -> dist/)
+            echo "⚒️  Build"
+            npm run build
 
-            echo "🚀 Starte/Reload PM2"
+            # Dev-Dependencies entfernen für schlankes Runtime-Image
+            echo "🧹 Prune devDependencies"
+            npm prune --omit=dev || true
+
+            # Start/Reload NUR diese App & in eigenem Namespace
+            echo "🚀 PM2 Start/Reload"
             if pm2 describe "$APP_NAME" --namespace "$NS" >/dev/null 2>&1; then
-              pm2 reload "$APP_NAME" --namespace "$NS" --update-env || \
-              pm2 restart "$APP_NAME" --namespace "$NS" --update-env
+              # env aktualisieren und Prozess neu starten
+              PORT="$PORT" pm2 restart "$APP_NAME" --namespace "$NS" --update-env
             else
-              pm2 start bash --name "$APP_NAME" --namespace "$NS" -- -lc "cd $APP_DIR && $START_CMD"
+              # Erster Start: korrekter cwd + ENV PORT
+              PORT="$PORT" pm2 start bash --name "$APP_NAME" --namespace "$NS" -- -lc "cd $APP_DIR && $START_CMD"
             fi
 
             pm2 save
