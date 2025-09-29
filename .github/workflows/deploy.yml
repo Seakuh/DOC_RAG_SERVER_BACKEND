@@ -13,9 +13,9 @@ jobs:
       SERVER_USER: root
       SERVER_HOST: 167.235.200.242
       SERVER_DIR: /var/www/vibestylerai
-      APP_DIR: /var/www/vibestylerai # Pfad mit package.json (ggf. anpassen)
+      APP_DIR: /var/www/vibestylerai # Pfad mit package.json (anpassen, z.B. /var/www/vibestylerai/backend)
       BRANCH: vibestylerai-main
-      REPO_URL: git@github.com:Seakuh/vibestylerai.git # <-- anpassen!
+      REPO_URL: git@github.com:Seakuh/vibestylerai.git # <-- ANPASSEN
       APP_NAME: vibestylerai
       NS: vibestylerai
       START_CMD: "npm run start -- -p 3007" # oder "npm run start:prod"
@@ -30,70 +30,80 @@ jobs:
           ssh-private-key: ${{ secrets.SSH_KEY }}
 
       - name: Trust server host key
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ env.SERVER_HOST }} >> ~/.ssh/known_hosts
+          chmod 700 ~/.ssh
+          ssh-keyscan -H "${{ env.SERVER_HOST }}" 2>/dev/null >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
 
-          - name: Deploy to server
-          run: |
-            ssh -T ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} << EOF
-              set -euo pipefail
+      - name: Deploy to server
+        shell: bash
+        run: |
+          ssh -T ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} << EOF
+            set -euo pipefail
 
-              REPO_URL="${{ env.REPO_URL }}"
-              BRANCH="${{ env.BRANCH }}"
-              SERVER_DIR="${{ env.SERVER_DIR }}"
-              APP_DIR="${{ env.APP_DIR }}"
-              APP_NAME="${{ env.APP_NAME }}"
-              NS="${{ env.NS }}"
-              START_CMD="${{ env.START_CMD }}"
+            REPO_URL="${{ env.REPO_URL }}"
+            BRANCH="${{ env.BRANCH }}"
+            SERVER_DIR="${{ env.SERVER_DIR }}"
+            APP_DIR="${{ env.APP_DIR }}"
+            APP_NAME="${{ env.APP_NAME }}"
+            NS="${{ env.NS }}"
+            START_CMD="${{ env.START_CMD }}"
 
-              mkdir -p "\$SERVER_DIR"
+            mkdir -p "\$SERVER_DIR"
 
-              if [ -d "\$SERVER_DIR/.git" ]; then
-                echo "➡️  Update bestehendes Repo"
-                cd "\$SERVER_DIR"
-                git fetch origin "\$BRANCH"
-                git checkout "\$BRANCH"
-                git reset --hard "origin/\$BRANCH"
+            if [ -d "\$SERVER_DIR/.git" ]; then
+              echo "➡️  Update bestehendes Repo"
+              cd "\$SERVER_DIR"
+              git fetch origin "\$BRANCH"
+              git checkout "\$BRANCH"
+              git reset --hard "origin/\$BRANCH"
+            else
+              if [ -z "\$(ls -A "\$SERVER_DIR")" ]; then
+                echo "➡️  Erste Installation (clone in leeres Verzeichnis)"
+                git clone --branch "\$BRANCH" "\$REPO_URL" "\$SERVER_DIR"
               else
-                if [ -z "\$(ls -A "\$SERVER_DIR")" ]; then
-                  echo "➡️  Erste Installation (clone in leeres Verzeichnis)"
-                  git clone --branch "\$BRANCH" "\$REPO_URL" "\$SERVER_DIR"
-                else
-                  echo "⚠️  Verzeichnis \$SERVER_DIR existiert, ist aber kein Git-Repo."
-                  echo "    Bitte aufräumen oder altes Deployment dorthin verschieben."
-                  exit 1
-                fi
+                echo "❌ Verzeichnis \$SERVER_DIR existiert, ist aber kein Git-Repo und nicht leer."
+                echo "   Bitte aufräumen oder Repo dort initialisieren (z.B. rm -rf \$SERVER_DIR)."
+                exit 1
               fi
+            fi
 
-              cd "\$APP_DIR"
+            cd "\$APP_DIR"
 
-              # Node & PM2 sicherstellen
-              if ! command -v node >/dev/null 2>&1; then
-                apt-get update
-                apt-get install -y curl
-                curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-                apt-get install -y nodejs
-              fi
-              if ! command -v pm2 >/dev/null 2>&1; then
-                npm i -g pm2
-              fi
+            # Node & PM2 sicherstellen (ohne andere Apps anzufassen)
+            if ! command -v node >/dev/null 2>&1; then
+              echo "📦 Installiere Node.js"
+              apt-get update
+              apt-get install -y curl
+              curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+              apt-get install -y nodejs
+            fi
+            if ! command -v pm2 >/dev/null 2>&1; then
+              echo "📦 Installiere PM2"
+              npm i -g pm2
+            fi
 
-              # Dependencies installieren
-              if [ -f package-lock.json ]; then
-                npm ci --omit=dev || npm ci
-              else
-                npm install --production || npm install
-              fi
+            echo "📦 Installiere Dependencies"
+            if [ -f package-lock.json ]; then
+              npm ci --omit=dev || npm ci
+            else
+              npm install --production || npm install
+            fi
 
-              npm run build || true
+            echo "⚒️  Build (falls vorhanden)"
+            npm run build || true
 
-              if pm2 describe "\$APP_NAME" --namespace "\$NS" >/dev/null 2>&1; then
-                pm2 reload "\$APP_NAME" --namespace "\$NS" --update-env || \
-                pm2 restart "\$APP_NAME" --namespace "\$NS" --update-env
-              else
-                pm2 start bash --name "\$APP_NAME" --namespace "\$NS" -- -lc "cd \$APP_DIR && \$START_CMD"
-              fi
+            echo "🚀 Starte/Reload PM2 (nur diese App, eigener Namespace)"
+            if pm2 describe "\$APP_NAME" --namespace "\$NS" >/dev/null 2>&1; then
+              pm2 reload "\$APP_NAME" --namespace "\$NS" --update-env || \
+              pm2 restart "\$APP_NAME" --namespace "\$NS" --update-env
+            else
+              pm2 start bash --name "\$APP_NAME" --namespace "\$NS" -- -lc "cd \$APP_DIR && \$START_CMD"
+            fi
 
-              pm2 save
-            EOF
+            echo "💾 Speichere PM2 Prozessliste"
+            pm2 save
+          EOF
