@@ -19,16 +19,27 @@ async function bootstrap() {
   app.useStaticAssets(join(__dirname, '..', 'public'));
 
   // Enable CORS with more permissive settings for development
-  // app.use(
-  //   cors({
-  //     origin: true, // Allow all origins in development
-  //     credentials: true,
-  //     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  //     allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With', 'X-Client-Id'],
-  //     preflightContinue: false,
-  //     optionsSuccessStatus: 204,
-  //   }),
-  // );
+  app.enableCors({
+    origin: [
+      /^https?:\/\/(localhost|127\.0\.0\.1):5173$/,
+      /^https:\/\/(www\.)?vibestylerai\.com$/,
+      /^https:\/\/localhost:5173$/,
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Authorization',
+      'Content-Type',
+      'Accept',
+      'Origin',
+      'X-Requested-With',
+      'X-Client-Id',
+      'If-Modified-Since',
+      'Cache-Control',
+      'Range',
+    ],
+    maxAge: 86400,
+  });
 
   // Global validation pipe
   app.useGlobalPipes(
@@ -226,7 +237,7 @@ async function bootstrap() {
     },
   });
 
-  const port = configService.get<number>('PORT', 3000);
+  const port = configService.get<number>('PORT', 3007);
 
   await app.listen(port);
 
