@@ -76,7 +76,7 @@ export class GenerateController {
         throw new BadRequestException('Invalid X-Client-Id');
       }
     })();
-    this.billing.ensureClient(clientId);
+    this.billing.ensureClient(clientId, 5);
 
     // Reserve tokens before generation; refund if generation fails
     try {

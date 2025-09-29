@@ -29,7 +29,7 @@ export class BillingController {
   @Throttle({ short: { limit: 5, ttl: 1000 } })
   async getTokens(@Req() req: Request, @Res() res: Response) {
     const clientId = readClientId(req, this.billing);
-    this.billing.ensureClient(clientId);
+    this.billing.ensureClient(clientId, 5);
     const tokens = this.billing.getTokens(clientId);
     this.logger.log(`Get tokens: clientId=${clientId} tokens=${tokens}`);
     return res.json({ tokens });
