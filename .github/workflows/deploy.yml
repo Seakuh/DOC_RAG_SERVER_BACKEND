@@ -63,6 +63,35 @@ jobs:
       - name: Install, build and start on server
         shell: bash
         run: |
+          echo "🚀 PM2 Start/Reload (mit ENV)"
+          if pm2 describe "$APP_NAME" --namespace "$NS" >/dev/null 2>&1; then
+            HETZNER_ACCESS_KEY='${{ secrets.HETZNER_ACCESS_KEY }}' \
+            HETZNER_BUCKET_NAME='${{ secrets.HETZNER_BUCKET_NAME }}' \
+            HETZNER_SECRET_KEY='${{ secrets.HETZNER_SECRET_KEY }}' \
+            MONGODB_URI='${{ secrets.MONGODB_URI }}' \
+            REPLICATE_API_TOKEN='${{ secrets.REPLICATE_API_TOKEN }}' \
+            STRIPE_PRICE_ID='${{ secrets.STRIPE_PRICE_ID }}' \
+            STRIPE_SECRET_KEY='${{ secrets.STRIPE_SECRET_KEY }}' \
+            STRIPE_WEBHOOK_SECRET='${{ secrets.STRIPE_WEBHOOK_SECRET }}' \
+            PORT='${{ env.PORT }}' \
+            NODE_ENV=production \
+            pm2 restart "$APP_NAME" --namespace "$NS" --update-env
+          else
+            HETZNER_ACCESS_KEY='${{ secrets.HETZNER_ACCESS_KEY }}' \
+            HETZNER_BUCKET_NAME='${{ secrets.HETZNER_BUCKET_NAME }}' \
+            HETZNER_SECRET_KEY='${{ secrets.HETZNER_SECRET_KEY }}' \
+            MONGODB_URI='${{ secrets.MONGODB_URI }}' \
+            REPLICATE_API_TOKEN='${{ secrets.REPLICATE_API_TOKEN }}' \
+            STRIPE_PRICE_ID='${{ secrets.STRIPE_PRICE_ID }}' \
+            STRIPE_SECRET_KEY='${{ secrets.STRIPE_SECRET_KEY }}' \
+            STRIPE_WEBHOOK_SECRET='${{ secrets.STRIPE_WEBHOOK_SECRET }}' \
+            PORT='${{ env.PORT }}' \
+            NODE_ENV=production \
+            pm2 start bash --name "$APP_NAME" --namespace "$NS" -- -lc "cd $APP_DIR && $START_CMD"
+          fi
+                  
+          pm2 save
+                  
           set -euo pipefail
           ssh -T ${{ env.SERVER_USER }}@${{ env.SERVER_HOST }} << 'EOF'
             set -euo pipefail
