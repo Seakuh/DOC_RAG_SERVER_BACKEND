@@ -1,41 +1,80 @@
-# DOC RAG Server Backend — FastAPI + Qdrant (Amazon Export)
+# 🚀 DOC RAG Server Backend — FastAPI + Qdrant (Amazon Export)
 
-This repository now includes a minimal Python FastAPI service that ingests your local Amazon data export into Qdrant and exposes a retrieval‑augmented chatbot. It lives alongside the existing NestJS README but is independent.
+Build a local, privacy‑friendly RAG chatbot over your Amazon data export using FastAPI, Qdrant, and OpenAI. Ingest your CSV/JSON files, search semantically, and ask questions with context. 🧠🔎💬
 
-Quickstart (Python):
+Why Qdrant? 🤝
+- Vector database purpose‑built for similarity search
+- Open source, fast HNSW index, great local DX
+- Simple API and client SDK, easy Docker setup
 
-- Create and fill `.env` (see `.env.example`). Ensure Qdrant is running (e.g., `docker run -p 6333:6333 qdrant/qdrant`).
-- Install dependencies: `pip install -r requirements.txt`
-- Start API: `uvicorn app.main:app --reload`
+What you get 📦
+- Ingestion of `AMAZON_DATA` into Qdrant with embeddings
+- Chat endpoint that answers based on retrieved context
+- Qdrant utility endpoints (list/info/count/recreate/delete collections)
+- Docker Compose to run everything locally
+- Scripts and curl examples to verify quickly
 
-Endpoints:
+Quickstart (Docker Compose) 🐳
+- Copy `.env.example` → `.env`.
+- If you use the built‑in Qdrant service, keep `QDRANT_URL=http://qdrant:6333` and start with profile: `docker compose --profile with-qdrant up -d --build`.
+- If you already have Qdrant on the host (port 6333), set `QDRANT_URL=http://host.docker.internal:6333`.
+- Start and auto‑ingest: `scripts/start-compose.sh` (API is on `http://localhost:8010`).
+- Or manually: `docker compose up -d --build` → `make ingest` → `make chat` (API on `http://localhost:8010`).
 
-- `POST /ingest` — scans `AMAZON_DATA` and upserts vectors into Qdrant
-- `POST /chat` — RAG chat using Qdrant context and OpenAI or Ollama
-- `GET /search?q=...&k=5` — debug search without LLM
-- `GET /health` — health check
+Quickstart (Python host) 🐍
+- Create `.env` (see `.env.example`). Set `QDRANT_URL=http://localhost:6333`.
+- Start Qdrant: `docker run -p 6333:6333 -v qdrant_storage:/qdrant/storage qdrant/qdrant`.
+- Install deps: `pip install -r requirements.txt`.
+- Run API: `uvicorn app.main:app --reload`.
 
-Env vars (see `.env.example`):
-
-- `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION`
+Environment 🧩 (see `.env.example`)
+- `QDRANT_URL`, `QDRANT_API_KEY` (optional), `QDRANT_COLLECTION` (default `amazon_export`)
 - `EMBEDDING_MODEL` (default `sentence-transformers/all-MiniLM-L6-v2`)
-- `OPENAI_API_KEY`, `OPENAI_MODEL` or `OLLAMA_HOST`, `OLLAMA_MODEL`
+- `OPENAI_API_KEY` and optional `OPENAI_MODEL` (e.g., `gpt-4o-mini`)
 - `AMAZON_DATA_PATH` (default `AMAZON_DATA`)
+- Ollama optional (leave unset if not used)
 
-Test with curl:
+API Endpoints 🌐 (Compose default base: `http://localhost:8010`)
+- `GET /health` — Health check
+- `POST /ingest` — Scan `AMAZON_DATA` and upsert vectors into Qdrant
+- `POST /chat` — RAG chat with top‑K Qdrant context (OpenAI or Ollama)
+- `GET /search?q=...&k=5` — Debug semantic search (no LLM)
 
+Qdrant Utility Endpoints 🧱
+- `GET /qdrant/collections` — List collections (names)
+- `GET /qdrant/collections/{name}` — Collection info + approximate vector count
+- `GET /qdrant/count?name={optional}` — Count points in a collection (defaults to active)
+- `DELETE /qdrant/collections/{name}` — Delete a collection
+- `POST /qdrant/collections/{name}/recreate` — Recreate collection with current embedding dim + cosine
+
+Test with curl 🧪 (Compose uses port 8010)
 ```bash
 # Ingest your Amazon export
-curl -X POST http://localhost:8000/ingest
+curl -X POST http://localhost:8010/ingest
 
 # Ask a question (German example)
-curl -X POST http://localhost:8000/chat \
+curl -X POST http://localhost:8010/chat \
   -H 'Content-Type: application/json' \
   -d '{"message":"Welche Bestellungen habe ich 2021 gemacht?","top_k":5}'
 
 # Inspect nearest neighbors only
-curl 'http://localhost:8000/search?q=Meine%20Bestellung%20Buch&k=5'
+curl 'http://localhost:8010/search?q=Meine%20Bestellung%20Buch&k=5'
+
+# Qdrant collections
+curl http://localhost:8010/qdrant/collections
+curl http://localhost:8010/qdrant/collections/amazon_export
+curl http://localhost:8010/qdrant/count
 ```
+
+How it works ⚙️
+- Ingestion reads `.csv` and `.json`, flattens rows/items to compact text blocks.
+- Embeds with `all-MiniLM-L6-v2` (384‑D) and upserts into Qdrant (cosine).
+- Chat retrieves top‑K nearest contexts and prompts the LLM to answer only from them.
+
+Troubleshooting 🧰
+- Qdrant unreachable: check `QDRANT_URL`, container health (`docker compose ps`), or port.
+- API 401 from Qdrant: set `QDRANT_API_KEY` in both Qdrant and `.env`.
+- Old collection dimension mismatch: `DELETE /qdrant/collections/{name}` then re‑`/ingest`.
 
 # RAG Backend with NestJS and Pinecone
 

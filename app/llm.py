@@ -21,7 +21,8 @@ async def generate_answer(query: str, contexts: List[str]) -> str:
     # Prefer Ollama if reachable; fallback to OpenAI if API key provided
     if settings.ollama_host:
         try:
-            async with httpx.AsyncClient(timeout=60) as client:
+            # Quick timeout to avoid delays when Ollama is not available
+            async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=1.0)) as client:
                 resp = await client.post(
                     f"{settings.ollama_host}/api/generate",
                     json={
@@ -60,4 +61,3 @@ async def generate_answer(query: str, contexts: List[str]) -> str:
         "[Hinweis] Kein LLM konfiguriert (OLLAMA_HOST oder OPENAI_API_KEY).\n"
         "Top-Treffer aus Qdrant:\n" + joined
     )
-

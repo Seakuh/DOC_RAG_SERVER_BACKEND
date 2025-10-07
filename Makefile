@@ -10,19 +10,17 @@ logs:
 	docker compose logs -f --tail=200
 
 health:
-	curl -sf http://localhost:8000/health | jq . || true
+	curl -sf http://localhost:8010/health | jq . || true
 
 ingest:
-	curl -X POST http://localhost:8000/ingest | jq . || true
+	curl -X POST http://localhost:8010/ingest | jq . || true
 
-chat:
-	curl -X POST http://localhost:8000/chat \
+	curl -X POST http://localhost:8010/chat \
 	  -H 'Content-Type: application/json' \
 	  -d '{"message":"Welche Bestellungen habe ich 2021 gemacht?","top_k":5}' | jq . || true
 
 search:
-	curl 'http://localhost:8000/search?q=Meine%20Bestellung%20Buch&k=5' | jq . || true
+	curl 'http://localhost:8010/search?q=Meine%20Bestellung%20Buch&k=5' | jq . || true
 
 build:
 	docker compose build
-

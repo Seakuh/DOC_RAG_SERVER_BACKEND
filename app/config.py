@@ -22,7 +22,8 @@ class Settings:
     openai_api_key: str | None = env_str("OPENAI_API_KEY")
     openai_model: str = env_str("OPENAI_MODEL", "gpt-4o-mini")
 
-    ollama_host: str | None = env_str("OLLAMA_HOST", "http://localhost:11434")
+    # If you don't use Ollama, leave it unset (None)
+    ollama_host: str | None = env_str("OLLAMA_HOST")
     ollama_model: str = env_str("OLLAMA_MODEL", "llama3.1")
 
     # Ingestion
@@ -31,4 +32,3 @@ class Settings:
 
 
 settings = Settings()
-

@@ -82,3 +82,31 @@ class QdrantVectorStore:
             })
         return results
 
+    # ---- Qdrant utility operations ----
+    def count(self, collection: str | None = None, exact: bool = True) -> int:
+        name = collection or self.collection
+        try:
+            res = self.client.count(collection_name=name, exact=exact)
+            # qdrant-client >=1.7 returns object with 'count'
+            return int(getattr(res, "count", 0))
+        except Exception:
+            return 0
+
+    def get_collection_info(self, collection: str | None = None):
+        name = collection or self.collection
+        return self.client.get_collection(name)
+
+    def list_collections(self) -> List[str]:
+        cols = self.client.get_collections()
+        return [c.name for c in getattr(cols, "collections", [])]
+
+    def delete_collection(self, name: str | None = None):
+        target = name or self.collection
+        return self.client.delete_collection(target)
+
+    def recreate_collection(self, name: str | None = None):
+        target = name or self.collection
+        return self.client.recreate_collection(
+            collection_name=target,
+            vectors_config=qmodels.VectorParams(size=self.embeddings.dim, distance=qmodels.Distance.COSINE),
+        )

@@ -16,3 +16,18 @@ class ChatResponse(BaseModel):
     answer: str
     sources: List[dict]
 
+
+class QdrantCollectionsResponse(BaseModel):
+    collections: List[str]
+
+
+class QdrantCollectionInfo(BaseModel):
+    name: str
+    vectors_count: Optional[int] = None
+    status: Optional[str] = None
+    config: Optional[dict] = None
+
+
+class QdrantCountResponse(BaseModel):
+    collection: str
+    count: int
