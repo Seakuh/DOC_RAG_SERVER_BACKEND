@@ -1,48 +1,33 @@
-version: '3.8'
+version: '3.9'
 
 services:
-  rag-backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: production
-    container_name: rag-backend
-    restart: unless-stopped
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
     ports:
-      - "3000:3000"
+      - "6333:6333"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: .
+    container_name: doc_rag_api
     env_file:
       - .env
-    environment:
-      - NODE_ENV=production
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
     volumes:
-      - ./logs:/app/logs
-    networks:
-      - rag-network
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/v1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  # Optional: Redis for caching (uncomment if needed)
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: rag-redis
-  #   restart: unless-stopped
-  #   ports:
-  #     - "6379:6379"
-  #   volumes:
-  #     - redis-data:/data
-  #   networks:
-  #     - rag-network
-
-networks:
-  rag-network:
-    driver: bridge
+      - ./:/app
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
 volumes:
-  # redis-data:
-  #   driver: local
-  logs:
-    driver: local
+  qdrant_storage:
+

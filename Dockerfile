@@ -1,55 +1,22 @@
-# Multi-stage Docker build for NestJS RAG Backend
+FROM python:3.11-slim
 
-# Stage 1: Build
-FROM node:18-alpine AS builder
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# System deps (git for some models; curl for health checks)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential git curl && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
-RUN npm ci --only=production && npm cache clean --force
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code
-COPY . .
+COPY app ./app
+COPY AMAZON_DATA ./AMAZON_DATA
 
-# Build the application
-RUN npm run build
+EXPOSE 8000
 
-# Stage 2: Production
-FROM node:18-alpine AS production
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
-# Set environment
-ENV NODE_ENV=production
-
-# Create app directory
-WORKDIR /app
-
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nestjs -u 1001
-
-# Copy package files
-COPY package*.json ./
-
-# Install production dependencies
-RUN npm ci --only=production && \
-    npm cache clean --force && \
-    rm package*.json
-
-# Copy built application from builder stage
-COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
-
-# Switch to non-root user
-USER nestjs
-
-# Expose port
-EXPOSE 3000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node dist/health-check.js
-
-# Start the application
-CMD ["node", "dist/main.js"]

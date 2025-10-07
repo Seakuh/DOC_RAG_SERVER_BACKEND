@@ -1,3 +1,42 @@
+# DOC RAG Server Backend — FastAPI + Qdrant (Amazon Export)
+
+This repository now includes a minimal Python FastAPI service that ingests your local Amazon data export into Qdrant and exposes a retrieval‑augmented chatbot. It lives alongside the existing NestJS README but is independent.
+
+Quickstart (Python):
+
+- Create and fill `.env` (see `.env.example`). Ensure Qdrant is running (e.g., `docker run -p 6333:6333 qdrant/qdrant`).
+- Install dependencies: `pip install -r requirements.txt`
+- Start API: `uvicorn app.main:app --reload`
+
+Endpoints:
+
+- `POST /ingest` — scans `AMAZON_DATA` and upserts vectors into Qdrant
+- `POST /chat` — RAG chat using Qdrant context and OpenAI or Ollama
+- `GET /search?q=...&k=5` — debug search without LLM
+- `GET /health` — health check
+
+Env vars (see `.env.example`):
+
+- `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION`
+- `EMBEDDING_MODEL` (default `sentence-transformers/all-MiniLM-L6-v2`)
+- `OPENAI_API_KEY`, `OPENAI_MODEL` or `OLLAMA_HOST`, `OLLAMA_MODEL`
+- `AMAZON_DATA_PATH` (default `AMAZON_DATA`)
+
+Test with curl:
+
+```bash
+# Ingest your Amazon export
+curl -X POST http://localhost:8000/ingest
+
+# Ask a question (German example)
+curl -X POST http://localhost:8000/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"Welche Bestellungen habe ich 2021 gemacht?","top_k":5}'
+
+# Inspect nearest neighbors only
+curl 'http://localhost:8000/search?q=Meine%20Bestellung%20Buch&k=5'
+```
+
 # RAG Backend with NestJS and Pinecone
 
 [![NestJS](https://img.shields.io/badge/NestJS-E0234E?style=flat&logo=nestjs&logoColor=white)](https://nestjs.com/)
