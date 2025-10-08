@@ -1,6 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { EmbeddingsService } from '../embeddings/embeddings.service';
-import { PineconeService, QueryResult } from '../pinecone/pinecone.service';
+import { QdrantService, QdrantQueryResult } from '../qdrant/qdrant.service';
 import { LLMService, LLMResponse } from '../llm/llm.service';
 import { QueryDto } from './dto/query.dto';
 import { QueryResponseDto } from './dto/query-response.dto';
@@ -12,7 +12,7 @@ export class QueryService {
 
   constructor(
     private embeddingsService: EmbeddingsService,
-    private pineconeService: PineconeService,
+    private qdrantService: QdrantService,
     private llmService: LLMService,
   ) {}
 
@@ -30,14 +30,14 @@ export class QueryService {
       // Generate embedding for the question
       const questionEmbedding = await this.embeddingsService.generateEmbedding(question);
 
-      // Build filter for Pinecone query
+      // Build filter for vector query
       const filter: Record<string, any> = {};
       if (source) {
         filter.source = { $eq: source };
       }
 
-      // Query Pinecone for relevant documents
-      const similarChunks = await this.pineconeService.query(
+      // Query Qdrant for relevant documents
+      const similarChunks: QdrantQueryResult[] = await this.qdrantService.query(
         questionEmbedding,
         maxResults * 2, // Get more results to filter by score
         Object.keys(filter).length > 0 ? filter : undefined
@@ -107,8 +107,8 @@ export class QueryService {
       // Generate embedding for the input text
       const textEmbedding = await this.embeddingsService.generateEmbedding(text);
 
-      // Query Pinecone for similar documents
-      const similarChunks = await this.pineconeService.query(
+      // Query Qdrant for similar documents
+      const similarChunks = await this.qdrantService.query(
         textEmbedding,
         limit * 2 // Get more results to filter by score
       );
@@ -181,14 +181,14 @@ export class QueryService {
     status: string;
     services: {
       embeddings: boolean;
-      pinecone: boolean;
+      qdrant: boolean;
       llm: boolean;
     };
     timestamp: string;
   }> {
     const services = {
       embeddings: false,
-      pinecone: false,
+      qdrant: false,
       llm: false,
     };
 
@@ -201,11 +201,11 @@ export class QueryService {
     }
 
     try {
-      // Test Pinecone service
-      await this.pineconeService.getStats();
-      services.pinecone = true;
+      // Test Qdrant service
+      await this.qdrantService.getStats();
+      services.qdrant = true;
     } catch (error) {
-      this.logger.warn('Pinecone service health check failed:', error);
+      this.logger.warn('Qdrant service health check failed:', error);
     }
 
     try {

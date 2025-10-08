@@ -71,9 +71,9 @@ export class EmbeddingsService {
           input: batch,
         };
         
-        // For text-embedding-3-small, set dimensions to 1024 to match Pinecone index
+        // Für Konsistenz mit Einzelaufrufen nutzen wir die gleiche Dimension
         if (embeddingModel === 'text-embedding-3-small') {
-          embeddingConfig.dimensions = 1024;
+          embeddingConfig.dimensions = 1536;
         }
 
         const response = await this.openai.embeddings.create(embeddingConfig);

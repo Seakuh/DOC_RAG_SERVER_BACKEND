@@ -27,11 +27,15 @@ export class QdrantService implements OnModuleInit {
   private collectionReady = false;
   private vectorSize: number | null = null;
   private readonly defaultVectorSize: number | null;
+  private readonly autoRecreate: boolean;
 
   constructor(private readonly configService: ConfigService) {
     this.collectionName = this.configService.get<string>('QDRANT_COLLECTION', 'rag_collection');
     this.defaultVectorSize = this.parseNumber(
       this.configService.get<string | number>('QDRANT_VECTOR_SIZE'),
+    );
+    this.autoRecreate = this.parseBoolean(
+      this.configService.get<string | boolean>('QDRANT_AUTO_RECREATE', false),
     );
   }
 
@@ -109,9 +113,15 @@ export class QdrantService implements OnModuleInit {
 
     if (this.collectionReady) {
       if (this.vectorSize && this.vectorSize !== vectorLength) {
-        throw new Error(
-          `Qdrant collection '${this.collectionName}' expects vectors of length ${this.vectorSize}, but received ${vectorLength}.`,
-        );
+        const message = `Qdrant collection '${this.collectionName}' expects vectors of length ${this.vectorSize}, but received ${vectorLength}.`;
+        if (!this.autoRecreate) {
+          throw new Error(message);
+        }
+
+        this.logger.warn(`${message} Recreating collection because QDRANT_AUTO_RECREATE=true.`);
+        await this.safeDeleteCollection();
+        this.collectionReady = false;
+        this.vectorSize = null;
       }
       return;
     }
@@ -160,6 +170,15 @@ export class QdrantService implements OnModuleInit {
     }
 
     const vectorLength = vectors[0].values.length;
+    if (!vectors.every(v => v.values.length === vectorLength)) {
+      throw new Error('All vectors must have the same dimensionality before upsert.');
+    }
+    if (!vectors.every(v => v.values.every(Number.isFinite))) {
+      throw new Error('Encountered non-finite values in vectors before upsert.');
+    }
+    this.logger.debug(
+      `Preparing Qdrant upsert for ${vectors.length} vectors (dimension=${vectorLength})`,
+    );
     await this.ensureCollection(vectorLength);
 
     try {
@@ -169,15 +188,16 @@ export class QdrantService implements OnModuleInit {
         points: vectors.map(vector => ({
           id: vector.id,
           vector: vector.values,
-          payload: vector.metadata,
+          payload: { ...vector.metadata },
         })),
       });
 
       const duration = Date.now() - startTime;
       this.logger.log(`Upserted ${vectors.length} vectors into Qdrant in ${duration}ms`);
     } catch (error) {
-      this.logger.error('Failed to upsert vectors into Qdrant:', error);
-      throw new Error(`Qdrant upsert failed: ${error.message ?? error}`);
+      const details = this.extractErrorDetails(error);
+      this.logger.error('Failed to upsert vectors into Qdrant:', details);
+      throw new Error(`Qdrant upsert failed: ${details.message}`);
     }
   }
 
@@ -203,13 +223,14 @@ export class QdrantService implements OnModuleInit {
         points: points.map(point => ({
           id: point.id,
           vector: point.vector,
-          payload: point.payload,
+          payload: { ...point.payload },
         })),
       });
       this.logger.log(`Upserted ${points.length} vectors into Qdrant`);
     } catch (error) {
-      this.logger.error('Failed to upsert vectors into Qdrant:', error);
-      throw new Error(`Qdrant upsert failed: ${error.message ?? error}`);
+      const details = this.extractErrorDetails(error);
+      this.logger.error('Failed to upsert vectors into Qdrant:', details);
+      throw new Error(`Qdrant upsert failed: ${details.message}`);
     }
   }
 
@@ -255,8 +276,9 @@ export class QdrantService implements OnModuleInit {
         })) ?? []
       );
     } catch (error) {
-      this.logger.error('Failed to query Qdrant:', error);
-      throw new Error(`Qdrant query failed: ${error.message ?? error}`);
+      const details = this.extractErrorDetails(error);
+      this.logger.error('Failed to query Qdrant:', details);
+      throw new Error(`Qdrant query failed: ${details.message}`);
     }
   }
 
@@ -292,8 +314,9 @@ export class QdrantService implements OnModuleInit {
       const results = await this.client.search(this.collectionName, request);
       return results;
     } catch (error) {
-      this.logger.error('Failed to search vectors in Qdrant:', error);
-      throw new Error(`Qdrant search failed: ${error.message ?? error}`);
+      const details = this.extractErrorDetails(error);
+      this.logger.error('Failed to search vectors in Qdrant:', details);
+      throw new Error(`Qdrant search failed: ${details.message}`);
     }
   }
 
@@ -326,8 +349,9 @@ export class QdrantService implements OnModuleInit {
       });
       this.logger.log(`Deleted Qdrant vectors for source '${source}'`);
     } catch (error) {
-      this.logger.error(`Failed to delete Qdrant vectors for source '${source}':`, error);
-      throw new Error(`Qdrant delete failed: ${error.message ?? error}`);
+      const details = this.extractErrorDetails(error);
+      this.logger.error(`Failed to delete Qdrant vectors for source '${source}':`, details);
+      throw new Error(`Qdrant delete failed: ${details.message}`);
     }
   }
 
@@ -349,8 +373,9 @@ export class QdrantService implements OnModuleInit {
       await this.client.delete(this.collectionName, { points: [id] });
       this.logger.log(`Deleted Qdrant vector with id '${id}'`);
     } catch (error) {
-      this.logger.error(`Failed to delete Qdrant vector with id '${id}':`, error);
-      throw new Error(`Qdrant delete failed: ${error.message ?? error}`);
+      const details = this.extractErrorDetails(error);
+      this.logger.error(`Failed to delete Qdrant vector with id '${id}':`, details);
+      throw new Error(`Qdrant delete failed: ${details.message}`);
     }
   }
 
@@ -373,8 +398,9 @@ export class QdrantService implements OnModuleInit {
       const stats = await this.client.getCollection(this.collectionName);
       return stats;
     } catch (error) {
-      this.logger.error('Failed to get Qdrant collection stats:', error);
-      throw new Error(`Qdrant stats failed: ${error.message ?? error}`);
+      const details = this.extractErrorDetails(error);
+      this.logger.error('Failed to get Qdrant collection stats:', details);
+      throw new Error(`Qdrant stats failed: ${details.message}`);
     }
   }
 
@@ -394,8 +420,9 @@ export class QdrantService implements OnModuleInit {
     try {
       return await this.client.getCollection(this.collectionName);
     } catch (error) {
-      this.logger.error('Failed to fetch Qdrant collection info:', error);
-      throw new Error(`Qdrant collection info failed: ${error.message ?? error}`);
+      const details = this.extractErrorDetails(error);
+      this.logger.error('Failed to fetch Qdrant collection info:', details);
+      throw new Error(`Qdrant collection info failed: ${details.message}`);
     }
   }
 
@@ -434,5 +461,55 @@ export class QdrantService implements OnModuleInit {
         : Number(String(value).trim());
 
     return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private parseBoolean(value: string | boolean | undefined | null): boolean {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'string') {
+      return ['true', '1', 'yes', 'on'].includes(value.toLowerCase());
+    }
+    return false;
+  }
+
+  private async safeDeleteCollection(): Promise<void> {
+    if (!this.client) {
+      return;
+    }
+
+    try {
+      await this.client.deleteCollection(this.collectionName);
+      this.logger.log(`Deleted Qdrant collection '${this.collectionName}' for recreation.`);
+    } catch (error) {
+      const details = this.extractErrorDetails(error);
+      this.logger.error(`Failed to delete Qdrant collection '${this.collectionName}':`, details);
+      throw new Error(`Qdrant delete collection failed: ${details.message}`);
+    }
+  }
+
+  private extractErrorDetails(error: any): {
+    message: string;
+    status?: number;
+    data?: any;
+  } {
+    const status = error?.response?.status ?? error?.status;
+    const data = error?.response?.data ?? error?.data;
+
+    let message = error?.message;
+
+    if (!message && data) {
+      if (typeof data === 'string') {
+        message = data;
+      } else if (typeof data === 'object') {
+        message = data.status?.error || JSON.stringify(data);
+      }
+    }
+
+    if (!message) {
+      message = 'Unknown Qdrant error';
+    }
+
+    return { message, status, data };
   }
 }

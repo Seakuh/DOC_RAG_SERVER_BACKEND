@@ -71,7 +71,12 @@ export class AmazonService {
           } as any,
         }));
 
-        await this.qdrantService.upsert(vectors);
+        await this.qdrantService.upsert(
+          vectors.map(vector => ({
+            ...vector,
+            id: this.ensureQdrantId(vector.id),
+          })),
+        );
 
         stats.filesProcessed += 1;
         stats.chunksCreated += chunks.length;
@@ -154,5 +159,26 @@ export class AmazonService {
     // Stable id pattern to allow dedup/deletes if needed
     const safe = relFile.replace(/[^a-zA-Z0-9_-]/g, '_');
     return `amazon:${safe}:${chunkIndex}`;
+  }
+
+  private ensureQdrantId(id: string): string {
+    // Qdrant allows UUID strings or unsigned integers. Ensure valid UUID format.
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(id)) {
+      return id;
+    }
+
+    const hash = this.simpleHash(id);
+    return `00000000-0000-4000-8000-${hash.padStart(12, '0')}`;
+  }
+
+  private simpleHash(value: string): string {
+    let hash = 0;
+    for (let i = 0; i < value.length; i++) {
+      hash = (hash << 5) - hash + value.charCodeAt(i);
+      hash |= 0; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(16).slice(0, 12);
   }
 }

@@ -44,7 +44,7 @@ import { AmazonModule } from './amazon/amazon.module';
         limit: 1000, // 1000 requests per hour
       },
     ]),
-    PineconeModule,
+    // PineconeModule,
     EmbeddingsModule,
     LLMModule,
     DocumentsModule,
