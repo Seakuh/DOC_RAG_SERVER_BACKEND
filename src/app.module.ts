@@ -15,6 +15,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ImageGenModule } from './image-gen/image-gen.module';
 import { BillingModule } from './billing/billing.module';
+import { AmazonModule } from './amazon/amazon.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { BillingModule } from './billing/billing.module';
     CogneeModule,
     ImageGenModule,
     BillingModule,
+    AmazonModule,
   ],
   controllers: [AppController],
   providers: [

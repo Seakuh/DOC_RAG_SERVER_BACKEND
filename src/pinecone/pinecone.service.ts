@@ -9,6 +9,7 @@ export interface DocumentMetadata {
   chunk_index: number;
   timestamp: string;
   total_chunks?: number;
+  file?: string;
 }
 
 export interface QueryResult {
