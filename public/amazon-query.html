@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Amazon RAG Abfrage</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+      }
+
+      body {
+        margin: 0;
+        padding: 2.5rem 1rem;
+        display: flex;
+        justify-content: center;
+        background: linear-gradient(135deg, #eef2ff 0%, #e0f2fe 100%);
+      }
+
+      .app {
+        width: min(800px, 100%);
+        background: rgba(255, 255, 255, 0.92);
+        border-radius: 18px;
+        padding: 2rem;
+        box-shadow: 0 18px 45px rgba(37, 99, 235, 0.18);
+        backdrop-filter: blur(6px);
+      }
+
+      h1 {
+        margin-top: 0;
+        font-size: 1.75rem;
+        color: #1e293b;
+      }
+
+      form {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+      }
+
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+        padding: 0.75rem;
+        border-radius: 10px;
+        border: 1px solid #d4d8f0;
+        font-size: 1rem;
+        background: #f8fafc;
+        color: #1e293b;
+      }
+
+      label {
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: #334155;
+      }
+
+      .controls {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+
+      .controls label {
+        font-size: 0.85rem;
+        font-weight: 500;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+
+      input[type='number'] {
+        width: 80px;
+        padding: 0.4rem;
+        border-radius: 6px;
+        border: 1px solid #d4d8f0;
+        background: #f8fafc;
+        color: #1e293b;
+      }
+
+      button {
+        align-self: flex-start;
+        background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+        color: white;
+        border: none;
+        border-radius: 999px;
+        padding: 0.7rem 1.6rem;
+        font-weight: 600;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: background 0.2s ease;
+        box-shadow: 0 10px 25px rgba(124, 58, 237, 0.25);
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      button:not(:disabled):hover {
+        background: linear-gradient(135deg, #1d4ed8 0%, #6d28d9 100%);
+      }
+
+      .status {
+        font-size: 0.9rem;
+        color: #475569;
+        margin-bottom: 0.5rem;
+        min-height: 1.2rem;
+      }
+
+      .answer {
+        white-space: pre-wrap;
+        line-height: 1.5;
+        font-size: 1rem;
+        color: #0f172a;
+      }
+
+      .sources {
+        margin-top: 1.5rem;
+      }
+
+      .source-item {
+        padding: 0.75rem;
+        border-radius: 10px;
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(129, 140, 248, 0.14));
+        border: 1px solid rgba(59, 130, 246, 0.12);
+        margin-bottom: 0.75rem;
+      }
+
+      .source-meta {
+        font-size: 0.8rem;
+        color: #334155;
+        margin-bottom: 0.35rem;
+      }
+
+      details {
+        margin-top: 1rem;
+        background: rgba(15, 23, 42, 0.06);
+        border-radius: 12px;
+        padding: 0.75rem 1rem;
+        color: #1e293b;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <h1>Frage deine Amazon-Daten</h1>
+      <p class="status" id="status"></p>
+
+      <form id="query-form">
+        <label for="question">Frage</label>
+        <textarea
+          id="question"
+          name="question"
+          placeholder="Welche Bestellungen habe ich 2023 gemacht?"
+          required
+        ></textarea>
+
+        <div class="controls">
+          <label>
+            maxResults
+            <input type="number" id="maxResults" name="maxResults" min="1" max="20" value="5" />
+          </label>
+          <label>
+            minScore
+            <input
+              type="number"
+              id="minScore"
+              name="minScore"
+              min="0"
+              max="1"
+              step="0.05"
+              value="0.5"
+            />
+          </label>
+        </div>
+
+        <button type="submit">Abfrage starten</button>
+      </form>
+
+      <section id="results" hidden>
+        <h2>Antwort</h2>
+        <p class="answer" id="answer"></p>
+
+        <div class="sources" id="sources"></div>
+
+        <details>
+          <summary>Token Usage</summary>
+          <pre id="token-usage"></pre>
+        </details>
+      </section>
+    </div>
+
+    <script>
+      const form = document.getElementById('query-form');
+      const statusEl = document.getElementById('status');
+      const resultsEl = document.getElementById('results');
+      const answerEl = document.getElementById('answer');
+      const sourcesEl = document.getElementById('sources');
+      const tokenUsageEl = document.getElementById('token-usage');
+
+      form.addEventListener('submit', async event => {
+        event.preventDefault();
+
+        const question = form.question.value.trim();
+        const maxResults = Number(form.maxResults.value) || 5;
+        const minScore = Number(form.minScore.value);
+
+        if (!question) {
+          statusEl.textContent = 'Bitte gib eine Frage ein.';
+          return;
+        }
+
+        statusEl.textContent = 'Frage wird verarbeitet …';
+        resultsEl.hidden = true;
+        sourcesEl.innerHTML = '';
+        form.querySelector('button[type="submit"]').disabled = true;
+
+        try {
+          const response = await fetch('http://localhost:3007/api/v1/amazon/query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question,
+              maxResults,
+              minScore,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Fehler ${response.status}: ${errorText}`);
+          }
+
+          const data = await response.json();
+
+          answerEl.textContent = data.answer ?? 'Keine Antwort erhalten.';
+          tokenUsageEl.textContent = JSON.stringify(data.tokenUsage ?? {}, null, 2);
+
+          sourcesEl.innerHTML = '';
+          if (Array.isArray(data.sources) && data.sources.length > 0) {
+            data.sources.forEach((source, index) => {
+              const container = document.createElement('article');
+              container.className = 'source-item';
+
+              const meta = document.createElement('div');
+              meta.className = 'source-meta';
+              meta.textContent = `Quelle ${index + 1} • ${
+                source.source ?? 'unbekannt'
+              } • Score: ${(source.score ?? 0).toFixed(3)}`;
+
+              const text = document.createElement('div');
+              text.textContent = source.text ?? '';
+
+              container.appendChild(meta);
+              container.appendChild(text);
+              sourcesEl.appendChild(container);
+            });
+          } else {
+            const info = document.createElement('p');
+            info.textContent = 'Keine Quellen gefunden.';
+            sourcesEl.appendChild(info);
+          }
+
+          resultsEl.hidden = false;
+          statusEl.textContent = `Letzte Anfrage abgeschlossen um ${new Date().toLocaleTimeString()}.`;
+        } catch (error) {
+          console.error(error);
+          statusEl.textContent = `Fehler: ${error.message}`;
+        } finally {
+          form.querySelector('button[type="submit"]').disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
