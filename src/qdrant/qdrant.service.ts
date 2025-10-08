@@ -1,225 +1,438 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { QdrantClient } from '@qdrant/js-client-rest';
+import { QdrantClient, QdrantClientParams } from '@qdrant/js-client-rest';
 
-export interface QdrantVector {
-  id: string | number;
-  vector: number[];
-  payload?: Record<string, any>;
-}
+export type QdrantDocumentMetadata = {
+  source: string;
+  page?: number;
+  chunk_index: number;
+  timestamp: string;
+  total_chunks?: number;
+  file?: string;
+  text?: string;
+} & Record<string, any>;
 
-export interface QdrantSearchResult {
-  id: string | number;
+export interface QdrantQueryResult {
+  id: string;
   score: number;
-  payload?: Record<string, any>;
+  metadata: QdrantDocumentMetadata;
+  text: string;
 }
 
 @Injectable()
 export class QdrantService implements OnModuleInit {
   private readonly logger = new Logger(QdrantService.name);
-  private client: QdrantClient;
-  private readonly collectionName = 'cannabis-strains';
+  private client: QdrantClient | null = null;
+  private readonly collectionName: string;
+  private collectionReady = false;
+  private vectorSize: number | null = null;
+  private readonly defaultVectorSize: number | null;
 
-  constructor(private readonly configService: ConfigService) {}
-
-  async onModuleInit() {
-    await this.initializeQdrant();
+  constructor(private readonly configService: ConfigService) {
+    this.collectionName = this.configService.get<string>('QDRANT_COLLECTION', 'rag_collection');
+    this.defaultVectorSize = this.parseNumber(
+      this.configService.get<string | number>('QDRANT_VECTOR_SIZE'),
+    );
   }
 
-  private async initializeQdrant() {
-    try {
-      const apiKey = this.configService.get<string>('QDRANT_API_KEY');
-      const apiUrl = this.configService.get<string>('QDRANT_API_URL');
+  async onModuleInit(): Promise<void> {
+    await this.initializeClient();
+  }
 
-      if (!apiKey || !apiUrl) {
-        throw new Error('QDRANT_API_KEY and QDRANT_API_URL must be configured');
+  private async initializeClient(): Promise<void> {
+    try {
+      const url = this.configService.get<string>('QDRANT_URL', 'http://localhost:6333');
+      const apiKey = this.configService.get<string>('QDRANT_API_KEY');
+
+      const params: QdrantClientParams = { url };
+      if (apiKey) {
+        params.apiKey = apiKey;
       }
 
-      this.client = new QdrantClient({
-        url: apiUrl,
-        apiKey: apiKey,
-      });
+      this.client = new QdrantClient(params);
 
-      this.logger.log('Qdrant client initialized successfully');
-      await this.ensureCollection();
+      await this.tryLoadExistingCollection();
     } catch (error) {
-      this.logger.error(`Failed to initialize Qdrant: ${error.message}`, error.stack);
-      throw error;
+      this.logger.error('❌ Failed to initialize Qdrant client:', error);
+      this.client = null;
     }
   }
 
-  private async ensureCollection() {
+  private async tryLoadExistingCollection(): Promise<void> {
+    if (!this.client) {
+      return;
+    }
+
     try {
-      const collections = await this.client.getCollections();
-      const exists = collections.collections.some(
-        (collection) => collection.name === this.collectionName
+      const collection = await this.client.getCollection(this.collectionName);
+      const size = (collection?.config?.params as any)?.vectors?.size;
+
+      if (typeof size === 'number') {
+        this.vectorSize = size;
+      }
+
+      this.collectionReady = true;
+      this.logger.log(
+        `✅ Connected to Qdrant collection '${this.collectionName}' (size: ${
+          this.vectorSize ?? 'unknown'
+        })`,
+      );
+    } catch (error: any) {
+      if (this.isNotFoundError(error)) {
+        this.logger.warn(
+          `⚠️ Qdrant collection '${this.collectionName}' not found. It will be created on first use.`,
+        );
+        return;
+      }
+
+      this.logger.error('❌ Failed to load Qdrant collection metadata:', error);
+    }
+  }
+
+  private isNotFoundError(error: any): boolean {
+    if (!error) {
+      return false;
+    }
+
+    const status = error?.response?.status ?? error?.status;
+    return status === 404;
+  }
+
+  private async ensureCollection(vectorLength?: number): Promise<void> {
+    if (!this.client) {
+      throw new Error('Qdrant client is not initialized. Check your configuration.');
+    }
+
+    if (!this.collectionReady) {
+      await this.tryLoadExistingCollection();
+    }
+
+    if (this.collectionReady) {
+      if (this.vectorSize && this.vectorSize !== vectorLength) {
+        throw new Error(
+          `Qdrant collection '${this.collectionName}' expects vectors of length ${this.vectorSize}, but received ${vectorLength}.`,
+        );
+      }
+      return;
+    }
+
+    const targetSize = vectorLength ?? this.defaultVectorSize;
+
+    if (!targetSize || targetSize <= 0) {
+      throw new Error(
+        `Qdrant collection '${this.collectionName}' is missing. Provide a valid QDRANT_VECTOR_SIZE or upsert at least one vector with values.`,
+      );
+    }
+
+    const distance = this.configService.get<string>('QDRANT_DISTANCE', 'Cosine');
+    const shardNumber = this.configService.get<number>('QDRANT_SHARD_NUMBER');
+    const replicationFactor = this.configService.get<number>('QDRANT_REPLICATION_FACTOR');
+
+    await this.client.createCollection(this.collectionName, {
+      vectors: {
+        size: targetSize,
+        distance: distance as any,
+      },
+      ...(shardNumber ? { shard_number: shardNumber } : {}),
+      ...(replicationFactor ? { replication_factor: replicationFactor } : {}),
+    });
+
+    this.collectionReady = true;
+    this.vectorSize = targetSize;
+    this.logger.log(
+      `✅ Created Qdrant collection '${this.collectionName}' with vector size ${targetSize} (distance: ${distance})`,
+    );
+  }
+
+  async upsert(
+    vectors: Array<{
+      id: string;
+      values: number[];
+      metadata: QdrantDocumentMetadata;
+    }>,
+  ): Promise<void> {
+    if (!vectors?.length) {
+      return;
+    }
+
+    if (!this.client) {
+      throw new Error('Qdrant client is not initialized. Check your configuration.');
+    }
+
+    const vectorLength = vectors[0].values.length;
+    await this.ensureCollection(vectorLength);
+
+    try {
+      const startTime = Date.now();
+
+      await this.client.upsert(this.collectionName, {
+        points: vectors.map(vector => ({
+          id: vector.id,
+          vector: vector.values,
+          payload: vector.metadata,
+        })),
+      });
+
+      const duration = Date.now() - startTime;
+      this.logger.log(`Upserted ${vectors.length} vectors into Qdrant in ${duration}ms`);
+    } catch (error) {
+      this.logger.error('Failed to upsert vectors into Qdrant:', error);
+      throw new Error(`Qdrant upsert failed: ${error.message ?? error}`);
+    }
+  }
+
+  async upsertVectors(
+    points: Array<{
+      id: string | number;
+      vector: number[];
+      payload: Record<string, any>;
+    }>,
+  ): Promise<void> {
+    if (!points?.length) {
+      return;
+    }
+
+    if (!this.client) {
+      throw new Error('Qdrant client is not initialized. Check your configuration.');
+    }
+
+    await this.ensureCollection(points[0].vector.length);
+
+    try {
+      await this.client.upsert(this.collectionName, {
+        points: points.map(point => ({
+          id: point.id,
+          vector: point.vector,
+          payload: point.payload,
+        })),
+      });
+      this.logger.log(`Upserted ${points.length} vectors into Qdrant`);
+    } catch (error) {
+      this.logger.error('Failed to upsert vectors into Qdrant:', error);
+      throw new Error(`Qdrant upsert failed: ${error.message ?? error}`);
+    }
+  }
+
+  async query(
+    vector: number[],
+    topK: number = 5,
+    filter?: Record<string, any>,
+  ): Promise<QdrantQueryResult[]> {
+    if (!this.client) {
+      throw new Error('Qdrant client is not initialized. Check your configuration.');
+    }
+
+    await this.ensureCollection(vector.length);
+
+    try {
+      const startTime = Date.now();
+
+      const request: any = {
+        vector,
+        limit: topK,
+        with_payload: true,
+        with_vector: false,
+      };
+
+      const qdrantFilter = this.transformFilter(filter);
+      if (qdrantFilter) {
+        request.filter = qdrantFilter;
+      }
+
+      const matches = await this.client.search(this.collectionName, request);
+
+      const duration = Date.now() - startTime;
+      this.logger.log(
+        `Query completed against Qdrant in ${duration}ms, found ${matches?.length ?? 0} matches`,
       );
 
-      if (!exists) {
-        await this.client.createCollection(this.collectionName, {
-          vectors: {
-            size: 1536, // OpenAI text-embedding-3-small dimension
-            distance: 'Cosine',
-          },
-        });
-        this.logger.log(`Created collection: ${this.collectionName}`);
-      } else {
-        this.logger.log(`Collection ${this.collectionName} already exists`);
-      }
+      return (
+        matches?.map(match => ({
+          id: String(match.id),
+          score: match.score ?? 0,
+          metadata: (match.payload as QdrantDocumentMetadata) ?? ({} as QdrantDocumentMetadata),
+          text: (match.payload as any)?.text ?? '',
+        })) ?? []
+      );
     } catch (error) {
-      this.logger.error(`Failed to ensure collection: ${error.message}`, error.stack);
-      throw error;
-    }
-  }
-
-  async upsertVectors(vectors: QdrantVector[]): Promise<void> {
-    try {
-      this.logger.log(`Preparing to upsert ${vectors.length} vectors`);
-
-      const points = vectors.map((vector) => {
-        // Validate vector data
-        if (!vector.vector || !Array.isArray(vector.vector)) {
-          throw new Error(`Invalid vector data for ID ${vector.id}`);
-        }
-
-        if (vector.vector.length !== 1536) {
-          throw new Error(`Vector dimension mismatch for ID ${vector.id}: expected 1536, got ${vector.vector.length}`);
-        }
-
-        return {
-          id: Number(vector.id), // Ensure ID is number
-          vector: vector.vector,
-          payload: vector.payload || {},
-        };
-      });
-
-      this.logger.log(`First point validation: ${JSON.stringify({
-        id: points[0]?.id,
-        idType: typeof points[0]?.id,
-        vectorLength: points[0]?.vector?.length,
-        payloadKeys: Object.keys(points[0]?.payload || {})
-      }, null, 2)}`);
-
-      // Process in smaller batches to avoid timeouts
-      const batchSize = 10;
-      let totalUpserted = 0;
-
-      for (let i = 0; i < points.length; i += batchSize) {
-        const batch = points.slice(i, i + batchSize);
-
-        this.logger.log(`Upserting batch ${Math.floor(i / batchSize) + 1}: ${batch.length} points`);
-
-        const result = await this.client.upsert(this.collectionName, {
-          wait: true,
-          points: batch,
-        });
-
-        totalUpserted += batch.length;
-        this.logger.log(`Batch result: ${JSON.stringify(result)}`);
-      }
-
-      this.logger.log(`Successfully upserted ${totalUpserted} vectors to collection ${this.collectionName}`);
-    } catch (error) {
-      this.logger.error(`Failed to upsert vectors: ${error.message}`);
-      this.logger.error(`Error response: ${JSON.stringify(error.response || error)}`);
-      this.logger.error(`Stack trace: ${error.stack}`);
-      throw error;
+      this.logger.error('Failed to query Qdrant:', error);
+      throw new Error(`Qdrant query failed: ${error.message ?? error}`);
     }
   }
 
   async searchVectors(
-    queryVector: number[],
-    limit: number = 5,
-    filter?: Record<string, any>
-  ): Promise<QdrantSearchResult[]> {
+    vector: number[],
+    topK: number = 5,
+    filter?: Record<string, any>,
+  ): Promise<
+    Array<{
+      id: string | number;
+      score: number;
+      payload?: Record<string, any> | null;
+    }>
+  > {
+    if (!this.client) {
+      throw new Error('Qdrant client is not initialized. Check your configuration.');
+    }
+
+    await this.ensureCollection(vector.length);
+
+    const request: any = {
+      vector,
+      limit: topK,
+      with_payload: true,
+      with_vector: false,
+    };
+
+    if (filter) {
+      request.filter = filter;
+    }
+
     try {
-      const searchRequest: any = {
-        vector: queryVector,
-        limit,
-        with_payload: true,
-      };
-
-      if (filter) {
-        searchRequest.filter = filter;
-      }
-
-      const searchResult = await this.client.search(this.collectionName, searchRequest);
-
-      return searchResult.map((result) => ({
-        id: result.id,
-        score: result.score,
-        payload: result.payload,
-      }));
+      const results = await this.client.search(this.collectionName, request);
+      return results;
     } catch (error) {
-      this.logger.error(`Failed to search vectors: ${error.message}`, error.stack);
-      throw error;
+      this.logger.error('Failed to search vectors in Qdrant:', error);
+      throw new Error(`Qdrant search failed: ${error.message ?? error}`);
     }
   }
 
-  async deleteVector(id: string | number): Promise<void> {
+  async deleteBySource(source: string): Promise<void> {
+    if (!this.client) {
+      throw new Error('Qdrant client is not initialized. Check your configuration.');
+    }
+
+    if (!this.collectionReady) {
+      await this.tryLoadExistingCollection();
+    }
+
+    if (!this.collectionReady) {
+      this.logger.warn(
+        `Qdrant collection '${this.collectionName}' not found. Skipping deleteBySource.`,
+      );
+      return;
+    }
+
     try {
       await this.client.delete(this.collectionName, {
-        points: [id],
+        filter: {
+          must: [
+            {
+              key: 'source',
+              match: { value: source },
+            },
+          ],
+        },
       });
-      this.logger.log(`Deleted vector with id: ${id}`);
+      this.logger.log(`Deleted Qdrant vectors for source '${source}'`);
     } catch (error) {
-      this.logger.error(`Failed to delete vector: ${error.message}`, error.stack);
-      throw error;
+      this.logger.error(`Failed to delete Qdrant vectors for source '${source}':`, error);
+      throw new Error(`Qdrant delete failed: ${error.message ?? error}`);
     }
   }
 
-  async deleteCollection(): Promise<void> {
+  async deleteById(id: string): Promise<void> {
+    if (!this.client) {
+      throw new Error('Qdrant client is not initialized. Check your configuration.');
+    }
+
+    if (!this.collectionReady) {
+      await this.tryLoadExistingCollection();
+    }
+
+    if (!this.collectionReady) {
+      this.logger.warn(`Qdrant collection '${this.collectionName}' not found. Skipping deleteById.`);
+      return;
+    }
+
     try {
-      await this.client.deleteCollection(this.collectionName);
-      this.logger.log(`Deleted collection: ${this.collectionName}`);
+      await this.client.delete(this.collectionName, { points: [id] });
+      this.logger.log(`Deleted Qdrant vector with id '${id}'`);
     } catch (error) {
-      this.logger.error(`Failed to delete collection: ${error.message}`, error.stack);
-      throw error;
+      this.logger.error(`Failed to delete Qdrant vector with id '${id}':`, error);
+      throw new Error(`Qdrant delete failed: ${error.message ?? error}`);
+    }
+  }
+
+  async getStats(): Promise<any> {
+    if (!this.client) {
+      throw new Error('Qdrant client is not initialized. Check your configuration.');
+    }
+
+    if (!this.collectionReady) {
+      await this.tryLoadExistingCollection();
+    }
+
+    if (!this.collectionReady) {
+      throw new Error(
+        `Qdrant collection '${this.collectionName}' not found. No stats available until a collection is created.`,
+      );
+    }
+
+    try {
+      const stats = await this.client.getCollection(this.collectionName);
+      return stats;
+    } catch (error) {
+      this.logger.error('Failed to get Qdrant collection stats:', error);
+      throw new Error(`Qdrant stats failed: ${error.message ?? error}`);
     }
   }
 
   async getCollectionInfo(): Promise<any> {
+    if (!this.client) {
+      throw new Error('Qdrant client is not initialized. Check your configuration.');
+    }
+
+    if (!this.collectionReady) {
+      await this.tryLoadExistingCollection();
+    }
+
+    if (!this.collectionReady) {
+      throw new Error(`Qdrant collection '${this.collectionName}' not found.`);
+    }
+
     try {
-      const info = await this.client.getCollection(this.collectionName);
-      return info;
+      return await this.client.getCollection(this.collectionName);
     } catch (error) {
-      this.logger.error(`Failed to get collection info: ${error.message}`, error.stack);
-      throw error;
+      this.logger.error('Failed to fetch Qdrant collection info:', error);
+      throw new Error(`Qdrant collection info failed: ${error.message ?? error}`);
     }
   }
 
-  async vectorizeStrain(strain: any): Promise<QdrantVector> {
-    const strainText = this.createStrainText(strain);
+  private transformFilter(filter?: Record<string, any>) {
+    if (!filter || Object.keys(filter).length === 0) {
+      return undefined;
+    }
 
-    // Note: This would require the embeddings service to generate the vector
-    // For now, we'll assume the vector is provided
-    return {
-      id: strain._id || strain.id,
-      vector: strain.vector, // This should come from embeddings service
-      payload: {
-        name: strain.name,
-        type: strain.type,
-        thc: strain.thc,
-        cbd: strain.cbd,
-        effects: strain.effects,
-        description: strain.description,
-        createdAt: new Date().toISOString(),
-      },
-    };
+    const must: any[] = [];
+
+    Object.entries(filter).forEach(([key, condition]) => {
+      if (condition && typeof condition === 'object') {
+        if ('$eq' in condition) {
+          must.push({ key, match: { value: condition.$eq } });
+        } else if ('$in' in condition) {
+          must.push({ key, match: { any: condition.$in } });
+        }
+      }
+    });
+
+    if (!must.length) {
+      return undefined;
+    }
+
+    return { must };
   }
 
-  private createStrainText(strain: any): string {
-    const parts = [
-      `Cannabis strain: ${strain.name}`,
-      `Type: ${strain.type}`,
-      `Description: ${strain.description}`,
-    ];
+  private parseNumber(value: string | number | undefined | null): number | null {
+    if (value === undefined || value === null) {
+      return null;
+    }
 
-    if (strain.thc) parts.push(`THC: ${strain.thc}%`);
-    if (strain.cbd) parts.push(`CBD: ${strain.cbd}%`);
-    if (strain.effects?.length) parts.push(`Effects: ${strain.effects.join(', ')}`);
-    if (strain.flavors?.length) parts.push(`Flavors: ${strain.flavors.join(', ')}`);
+    const parsed =
+      typeof value === 'number'
+        ? value
+        : Number(String(value).trim());
 
-    return parts.join('. ');
+    return Number.isFinite(parsed) ? parsed : null;
   }
 }

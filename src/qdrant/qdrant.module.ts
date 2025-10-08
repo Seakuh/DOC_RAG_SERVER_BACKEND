@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { EmbeddingsModule } from '../embeddings/embeddings.module';
 import { QdrantService } from './qdrant.service';
 import { VectorizationService } from './vectorization.service';
-import { EmbeddingsModule } from '../embeddings/embeddings.module';
 
 @Module({
   imports: [ConfigModule, EmbeddingsModule],

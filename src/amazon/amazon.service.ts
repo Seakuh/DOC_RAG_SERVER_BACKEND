@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EmbeddingsService, TextChunk } from '../embeddings/embeddings.service';
-import { PineconeService } from '../pinecone/pinecone.service';
+import { QdrantService } from '../qdrant/qdrant.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -18,7 +18,7 @@ export class AmazonService {
 
   constructor(
     private readonly embeddingsService: EmbeddingsService,
-    private readonly pineconeService: PineconeService,
+    private readonly qdrantService: QdrantService,
   ) {}
 
   async ingestAll(): Promise<IngestStats> {
@@ -71,7 +71,7 @@ export class AmazonService {
           } as any,
         }));
 
-        await this.pineconeService.upsert(vectors);
+        await this.qdrantService.upsert(vectors);
 
         stats.filesProcessed += 1;
         stats.chunksCreated += chunks.length;
@@ -90,7 +90,7 @@ export class AmazonService {
 
   async reindex(): Promise<IngestStats> {
     // Remove previous amazon vectors and ingest again
-    await this.pineconeService.deleteBySource('amazon');
+    await this.qdrantService.deleteBySource('amazon');
     return this.ingestAll();
   }
 
