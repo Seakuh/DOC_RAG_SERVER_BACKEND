@@ -1,4 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as crypto from 'crypto';
+import type { Request, Response } from 'express';
 
 function isValidClientId(id?: string): id is string {
   if (!id) return false;
@@ -15,6 +17,7 @@ export class BillingService {
   private processedSessions = new Set<string>();
   private locks = new Map<string, Promise<void>>();
   private readonly logger = new Logger('BillingService');
+  private readonly secret: string = process.env.CLIENT_ID_SECRET || crypto.randomBytes(32).toString('hex');
 
   private async withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
     const prev = this.locks.get(key) || Promise.resolve();
@@ -101,5 +104,65 @@ export class BillingService {
       throw new Error('Invalid X-Client-Id');
     }
     return id!;
+  }
+
+  // Signed client id helpers (cookie-based)
+  private base64url(buf: Buffer) {
+    return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  private signId(id: string): string {
+    const h = crypto.createHmac('sha256', this.secret).update(id).digest();
+    return this.base64url(h);
+  }
+
+  private makeNewClientId(): string {
+    // 16 random bytes as hex => 32 chars, matches allowed charset (a-f0-9)
+    return crypto.randomBytes(16).toString('hex');
+  }
+
+  verifySignedClientCookie(val?: string): string | null {
+    if (!val) return null;
+    const dot = val.lastIndexOf('.');
+    if (dot <= 0) return null;
+    const id = val.slice(0, dot);
+    const sig = val.slice(dot + 1);
+    if (!isValidClientId(id)) return null;
+    const expected = this.signId(id);
+    if (sig !== expected) return null;
+    return id;
+  }
+
+  getOrCreateSignedClientId(req: Request, res: Response, initialTokens = 1): string {
+    const rawCookie = req.headers['cookie'] as string | undefined;
+    const cookies: Record<string, string> = {};
+    if (rawCookie) {
+      for (const part of rawCookie.split(';')) {
+        const [k, ...rest] = part.split('=');
+        const key = (k || '').trim();
+        const value = rest.join('=').trim();
+        if (key) cookies[key] = decodeURIComponent(value || '');
+      }
+    }
+    const current = cookies['cid'];
+    const verified = this.verifySignedClientCookie(current);
+    if (verified) {
+      this.ensureClient(verified, initialTokens);
+      return verified;
+    }
+    const id = this.makeNewClientId();
+    const token = `${id}.${this.signId(id)}`;
+    // Cookie options: 1 year, HttpOnly, SameSite=Lax, Secure in production
+    const secure = process.env.NODE_ENV === 'production';
+    const maxAge = 365 * 24 * 60 * 60 * 1000; // 1y
+    (res as Response).cookie('cid', token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure,
+      maxAge,
+      path: '/',
+    } as any);
+    this.ensureClient(id, initialTokens);
+    return id;
   }
 }

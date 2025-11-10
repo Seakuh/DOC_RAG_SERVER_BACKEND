@@ -62,14 +62,8 @@ async function bootstrap() {
 
   server.get('/api/tokens', async (req, res) => {
     try {
-      const clientId = (req.headers['x-client-id'] as string | undefined) || undefined;
-      try {
-        const id = billing.validateClientIdOrThrow(clientId);
-        billing.ensureClient(id, 5);
-        return res.json({ tokens: billing.getTokens(id) });
-      } catch {
-        return res.status(400).json({ error: 'Invalid X-Client-Id' });
-      }
+      const id = billing.getOrCreateSignedClientId(req as any, res as any, 1);
+      return res.json({ tokens: billing.getTokens(id) });
     } catch (err) {
       return res.status(500).json({ error: 'Internal error' });
     }
@@ -77,13 +71,7 @@ async function bootstrap() {
 
   server.post('/api/checkout', express.json(), async (req, res) => {
     try {
-      const clientHeader = (req.headers['x-client-id'] as string | undefined) || undefined;
-      let clientId: string;
-      try {
-        clientId = billing.validateClientIdOrThrow(clientHeader);
-      } catch {
-        return res.status(400).json({ error: 'Invalid X-Client-Id' });
-      }
+      const clientId = billing.getOrCreateSignedClientId(req as any, res as any, 1);
       if (!stripe) return res.status(500).json({ error: 'Stripe not configured' });
       if (!priceId) return res.status(500).json({ error: 'Missing STRIPE_PRICE_ID' });
       const quantityRaw = (req.body && req.body.quantity) || undefined;

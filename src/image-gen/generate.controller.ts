@@ -1,14 +1,23 @@
-import { Body, Controller, Post, UploadedFile, UseInterceptors, BadRequestException, Res, Req } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Post,
+  Req,
+  Res,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ImageGenService } from './image-gen.service';
-import { ImageService } from '../image/image.service';
+import { Throttle } from '@nestjs/throttler';
 import * as crypto from 'crypto';
+import { Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
-import { buildStylingPrompt, getAspectRatio } from './prompt.util';
-import { Request, Response } from 'express';
 import { BillingService } from '../billing/billing.service';
-import { Throttle } from '@nestjs/throttler';
+import { ImageService } from '../image/image.service';
+import { ImageGenService } from './image-gen.service';
+import { buildStylingPrompt, getAspectRatio } from './prompt.util';
 
 @Controller()
 export class GenerateController {
@@ -49,7 +58,7 @@ export class GenerateController {
     let bubbles: string[] = [];
     try {
       const parsed = JSON.parse(bubblesJson);
-      if (!Array.isArray(parsed) || !parsed.every((x) => typeof x === 'string')) {
+      if (!Array.isArray(parsed) || !parsed.every(x => typeof x === 'string')) {
         throw new Error('Invalid bubbles format');
       }
       bubbles = parsed as string[];
@@ -57,7 +66,15 @@ export class GenerateController {
       throw new BadRequestException('Invalid bubbles JSON');
     }
 
-    const prompt = buildStylingPrompt(bubbles, { notes, gender, hairstyleId, hairstyleLabel, hairColorFrom, hairColorTo, framing });
+    const prompt = buildStylingPrompt(bubbles, {
+      notes,
+      gender,
+      hairstyleId,
+      hairstyleLabel,
+      hairColorFrom,
+      hairColorTo,
+      framing,
+    });
     const aspectRatio = getAspectRatio(bubbles);
     let amount = framing === 'collection' && amountRaw === undefined ? 3 : 1;
     if (amountRaw !== undefined) {

@@ -35,6 +35,8 @@ lerna-debug.log*
 !.vscode/launch.json
 !.vscode/extensions.json
 
+AMAZON_DATA
+
 # Environment variables
 .env
 .env.local
