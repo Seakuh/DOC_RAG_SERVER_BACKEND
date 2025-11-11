@@ -62,8 +62,8 @@ jobs:
               chmod 600 .env
 
               echo "START PM2 neu..."
-              pm2 delete poker-backend || true
-              pm2 start dist/main.js --name poker-backend --watch
+              pm2 delete RAG-SERVER || true
+              pm2 start dist/main.js --name RAG-SERVER --watch
               pm2 save
 
               pm2 status
