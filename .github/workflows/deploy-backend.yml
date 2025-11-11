@@ -1,70 +1,70 @@
 name: Deploy Backend
 
 on:
-    push:
-        branches:
-            - master
+  push:
+    branches:
+      - master
 
 jobs:
-    deploy:
-        runs-on: ubuntu-latest
+  deploy:
+    runs-on: ubuntu-latest
 
-        steps:
-            - name: Checkout Repository
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 18
-                  cache: npm
-                  cache-dependency-path: package-lock.json
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: package-lock.json
 
-            - name: Install Dependencies (CI)
-              run: npm ci
+      - name: Install Dependencies (CI)
+        run: npm ci
 
-            - name: Build Backend (CI)
-              run: npm run build
+      - name: Build Backend (CI)
+        run: npm run build
 
-            - name: Set up SSH (Base64, robust)
-              run: |
-                  mkdir -p ~/.ssh
-                  echo "${{ secrets.SSH_PRIVATE_KEY_BACKEND_B64 }}" | base64 -d > ~/.ssh/id_ed25519
-                  chmod 600 ~/.ssh/id_ed25519
-                  eval "$(ssh-agent -s)"
-                  ssh-add ~/.ssh/id_ed25519
-                  ssh-keyscan -H 188.34.184.47 >> ~/.ssh/known_hosts
+      - name: Set up SSH (Base64, robust)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY_BACKEND_B64 }}" | base64 -d > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_ed25519
+          ssh-keyscan -H 87.106.45.41 >> ~/.ssh/known_hosts
 
-            - name: Deploy Backend via SSH
-              run: |
-                  ssh -o StrictHostKeyChecking=yes root@188.34.184.47 '
-                      set -e
-                      echo "Starte Deployment..."
+      - name: Deploy Backend via SSH
+        run: |
+          ssh -o StrictHostKeyChecking=yes root@87.106.45.41 '
+              set -e
+              echo "Starte Deployment..."
 
-                      cd /root/poker-backend/livepokergamebackend
+              cd /root/poker-backend/livepokergamebackend
 
-                      echo "Hole neueste Änderungen..."
-                      git fetch origin master
-                      git reset --hard origin/master
+              echo "Hole neueste Änderungen..."
+              git fetch origin master
+              git reset --hard origin/master
 
-                      echo "Installiere Dependencies & Build..."
-                      npm install --no-audit --no-fund
-                      npm run build
+              echo "Installiere Dependencies & Build..."
+              npm install --no-audit --no-fund
+              npm run build
 
-                      echo "Schreibe .env..."
-                      cat > .env <<EOF
-                      PORT=4001
-                      MONGODB_URI=${{ secrets.MONGODB_URI }}
-                      JWT_SECRET=${{ secrets.JWT_SECRET }}
-                      HETZNER_ACCESS_KEY=${{ secrets.HETZNER_ACCESS_KEY }}
-                      HETZNER_SECRET_KEY=${{ secrets.HETZNER_SECRET_KEY }}
-                      EOF
-                      chmod 600 .env
+              echo "Schreibe .env..."
+              cat > .env <<EOF
+              PORT=4001
+              MONGODB_URI=${{ secrets.MONGODB_URI }}
+              JWT_SECRET=${{ secrets.JWT_SECRET }}
+              HETZNER_ACCESS_KEY=${{ secrets.HETZNER_ACCESS_KEY }}
+              HETZNER_SECRET_KEY=${{ secrets.HETZNER_SECRET_KEY }}
+              EOF
+              chmod 600 .env
 
-                      echo "START PM2 neu..."
-                      pm2 delete poker-backend || true
-                      pm2 start dist/main.js --name poker-backend --watch
-                      pm2 save
+              echo "START PM2 neu..."
+              pm2 delete poker-backend || true
+              pm2 start dist/main.js --name poker-backend --watch
+              pm2 save
 
-                      pm2 status
-                    '
+              pm2 status
+            '
