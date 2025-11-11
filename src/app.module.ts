@@ -16,6 +16,7 @@ import { AppService } from './app.service';
 import { ImageGenModule } from './image-gen/image-gen.module';
 import { BillingModule } from './billing/billing.module';
 import { OpenAIModule } from './openai/openai.module';
+import { FredolinModule } from './fredolin/fredolin.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { OpenAIModule } from './openai/openai.module';
     ImageGenModule,
     BillingModule,
     OpenAIModule,
+    FredolinModule,
   ],
   controllers: [AppController],
   providers: [
