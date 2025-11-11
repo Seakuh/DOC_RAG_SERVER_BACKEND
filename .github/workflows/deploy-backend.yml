@@ -41,7 +41,7 @@ jobs:
               set -e
               echo "Starte Deployment..."
 
-              cd /root/poker-backend/livepokergamebackend
+              cd /root/RAG-SERVER
 
               echo "Hole neueste Änderungen..."
               git fetch origin master
