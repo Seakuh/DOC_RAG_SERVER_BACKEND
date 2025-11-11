@@ -16,7 +16,7 @@ import { OpenAIService } from './openai.service';
 import { AskOpenAIDto } from './dto/ask-openai.dto';
 
 @ApiTags('OpenAI')
-@Controller('api/v1/openai')
+@Controller('openai')
 export class OpenAIController {
   private readonly logger = new Logger(OpenAIController.name);
 

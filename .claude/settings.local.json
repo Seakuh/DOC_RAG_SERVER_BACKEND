@@ -15,7 +15,9 @@
       "Bash(lsof:*)",
       "Bash(tree:*)",
       "Bash(cat:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(xargs kill:*)",
+      "Bash(/tmp/test_document.txt)"
     ],
     "deny": [],
     "ask": []
