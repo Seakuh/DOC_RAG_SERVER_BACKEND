@@ -15,6 +15,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ImageGenModule } from './image-gen/image-gen.module';
 import { BillingModule } from './billing/billing.module';
+import { OpenAIModule } from './openai/openai.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { BillingModule } from './billing/billing.module';
     CogneeModule,
     ImageGenModule,
     BillingModule,
+    OpenAIModule,
   ],
   controllers: [AppController],
   providers: [
