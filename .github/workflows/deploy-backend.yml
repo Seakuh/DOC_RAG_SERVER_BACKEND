@@ -41,7 +41,7 @@ jobs:
               set -e
               echo "Starte Deployment..."
 
-              cd /root/RAG-SERVER
+              cd /root/RAG-SERVER/DOC_RAG_SERVER_BACKEND
 
               echo "Hole neueste Änderungen..."
               git fetch origin master
