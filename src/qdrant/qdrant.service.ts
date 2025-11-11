@@ -72,9 +72,14 @@ export class QdrantService implements OnModuleInit {
     }
   }
 
-  async upsertVectors(vectors: QdrantVector[]): Promise<void> {
+  async upsertVectors(vectors: QdrantVector[], collectionName?: string): Promise<void> {
+    const targetCollection = collectionName || this.collectionName;
+
+    // Ensure collection exists
+    await this.ensureCollectionExists(targetCollection);
+
     try {
-      this.logger.log(`Preparing to upsert ${vectors.length} vectors`);
+      this.logger.log(`Preparing to upsert ${vectors.length} vectors to collection: ${targetCollection}`);
 
       const points = vectors.map((vector) => {
         // Validate vector data
@@ -109,7 +114,7 @@ export class QdrantService implements OnModuleInit {
 
         this.logger.log(`Upserting batch ${Math.floor(i / batchSize) + 1}: ${batch.length} points`);
 
-        const result = await this.client.upsert(this.collectionName, {
+        const result = await this.client.upsert(targetCollection, {
           wait: true,
           points: batch,
         });
@@ -118,11 +123,33 @@ export class QdrantService implements OnModuleInit {
         this.logger.log(`Batch result: ${JSON.stringify(result)}`);
       }
 
-      this.logger.log(`Successfully upserted ${totalUpserted} vectors to collection ${this.collectionName}`);
+      this.logger.log(`Successfully upserted ${totalUpserted} vectors to collection ${targetCollection}`);
     } catch (error) {
       this.logger.error(`Failed to upsert vectors: ${error.message}`);
       this.logger.error(`Error response: ${JSON.stringify(error.response || error)}`);
       this.logger.error(`Stack trace: ${error.stack}`);
+      throw error;
+    }
+  }
+
+  private async ensureCollectionExists(collectionName: string): Promise<void> {
+    try {
+      const collections = await this.client.getCollections();
+      const exists = collections.collections.some(
+        (collection) => collection.name === collectionName
+      );
+
+      if (!exists) {
+        await this.client.createCollection(collectionName, {
+          vectors: {
+            size: 1536, // OpenAI text-embedding-3-small dimension
+            distance: 'Cosine',
+          },
+        });
+        this.logger.log(`Created collection: ${collectionName}`);
+      }
+    } catch (error) {
+      this.logger.error(`Failed to ensure collection exists: ${error.message}`, error.stack);
       throw error;
     }
   }
