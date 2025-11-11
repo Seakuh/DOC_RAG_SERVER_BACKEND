@@ -18,7 +18,10 @@
       "Bash(test:*)",
       "Bash(xargs kill:*)",
       "Bash(/tmp/test_document.txt)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
