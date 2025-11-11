@@ -31,13 +31,17 @@ export class QdrantService implements OnModuleInit {
       const apiKey = this.configService.get<string>('QDRANT_API_KEY');
       const apiUrl = this.configService.get<string>('QDRANT_API_URL');
 
-      if (!apiKey || !apiUrl) {
-        throw new Error('QDRANT_API_KEY and QDRANT_API_URL must be configured');
+      if (!apiUrl) {
+        throw new Error('QDRANT_API_URL must be configured');
+      }
+
+      if (!apiKey) {
+        this.logger.warn('QDRANT_API_KEY not set - using Qdrant without authentication');
       }
 
       this.client = new QdrantClient({
         url: apiUrl,
-        apiKey: apiKey,
+        ...(apiKey && { apiKey }), // Only add apiKey if present
       });
 
       this.logger.log('Qdrant client initialized successfully');
