@@ -86,7 +86,7 @@ jobs:
               PINECONE_ENVIRONMENT=${{ secrets.PINECONE_ENVIRONMENT }}
 
               # ==============================================
-              # Qdrant (Local on Port 6333)
+              # Qdrant (Local on Port 6333) NOW
               # ==============================================
               QDRANT_API_URL=${{ secrets.QDRANT_API_URL }}
               QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
