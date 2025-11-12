@@ -26,6 +26,17 @@ jobs:
       - name: Build Backend (CI)
         run: npm run build
 
+      - name: Write SSH key
+        run: |
+          install -m 700 -d ~/.ssh
+          cat > ~/.ssh/id_ed25519 << 'EOF'
+          ${{ secrets.SSH_PRIVATE_KEY_BACKEND }}
+          EOF
+          chmod 600 ~/.ssh/id_ed25519
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_ed25519
+          printf "Host 142.132.191.84\n  StrictHostKeyChecking no\n" >> ~/.ssh/config
+
       - name: Set up SSH (Base64, robust)
         run: |
           mkdir -p ~/.ssh
