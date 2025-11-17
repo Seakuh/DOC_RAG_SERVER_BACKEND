@@ -25,7 +25,7 @@ interface JwtPayload {
 }
 
 @ApiTags('personality')
-@Controller('api/v1/personality')
+@Controller('personality')
 @UseGuards(JwtAuthGuard)
 export class PersonalityController {
   constructor(private readonly personalityService: PersonalityService) {}
