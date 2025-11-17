@@ -210,6 +210,8 @@ async function bootstrap() {
     .addTag('Query', 'Question answering and search')
     .addTag('cannabis', 'Cannabis strain management and mood-based recommendations')
     .addTag('cognee', 'Cognee knowledge graph processing and semantic search')
+    .addTag('personality', 'Personality analysis and profile matching')
+    .addBearerAuth()
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

@@ -16,6 +16,7 @@ import { AppService } from './app.service';
 import { ImageGenModule } from './image-gen/image-gen.module';
 import { BillingModule } from './billing/billing.module';
 import { OpenAIModule } from './openai/openai.module';
+import { PersonalityModule } from './personality/personality.module';
 
 @Module({
   imports: [
@@ -44,7 +45,7 @@ import { OpenAIModule } from './openai/openai.module';
         limit: 1000, // 1000 requests per hour
       },
     ]),
-    PineconeModule,
+    // PineconeModule,
     EmbeddingsModule,
     LLMModule,
     DocumentsModule,
@@ -54,6 +55,7 @@ import { OpenAIModule } from './openai/openai.module';
     ImageGenModule,
     BillingModule,
     OpenAIModule,
+    PersonalityModule,
   ],
   controllers: [AppController],
   providers: [
