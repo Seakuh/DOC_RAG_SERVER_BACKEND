@@ -19,6 +19,7 @@ export class QdrantService implements OnModuleInit {
   private readonly logger = new Logger(QdrantService.name);
   private client: QdrantClient;
   private readonly collectionName = 'cannabis-strains';
+  private qdrantAvailable = false;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -29,11 +30,7 @@ export class QdrantService implements OnModuleInit {
   private async initializeQdrant() {
     try {
       const apiKey = this.configService.get<string>('QDRANT_API_KEY');
-      const apiUrl = this.configService.get<string>('QDRANT_API_URL');
-
-      if (!apiUrl) {
-        throw new Error('QDRANT_API_URL must be configured');
-      }
+      const apiUrl = this.configService.get<string>('QDRANT_API_URL', 'http://localhost:6333');
 
       if (!apiKey) {
         this.logger.warn('QDRANT_API_KEY not set - using Qdrant without authentication');
@@ -47,8 +44,10 @@ export class QdrantService implements OnModuleInit {
       this.logger.log('Qdrant client initialized successfully');
       await this.ensureCollection();
     } catch (error) {
-      this.logger.error(`Failed to initialize Qdrant: ${error.message}`, error.stack);
-      throw error;
+      this.logger.error(`Failed to initialize Qdrant: ${error.message}`);
+      this.logger.warn('Qdrant may not be available. Cannabis strain vector search features will be disabled.');
+      this.qdrantAvailable = false;
+      // Don't throw - allow the service to start without Qdrant
     }
   }
 
@@ -70,9 +69,11 @@ export class QdrantService implements OnModuleInit {
       } else {
         this.logger.log(`Collection ${this.collectionName} already exists`);
       }
+      this.qdrantAvailable = true;
     } catch (error) {
-      this.logger.error(`Failed to ensure collection: ${error.message}`, error.stack);
-      throw error;
+      this.logger.error(`Failed to ensure collection: ${error.message}`);
+      this.qdrantAvailable = false;
+      // Don't throw - allow the service to start without Qdrant
     }
   }
 
