@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ProfileMatchDto {
   @ApiProperty({ description: 'Profile ID of the matched user' })
@@ -7,11 +7,17 @@ export class ProfileMatchDto {
   @ApiProperty({ description: 'User ID of the matched user' })
   userId: string;
 
-  @ApiProperty({ description: 'Match score (0-1)' })
+  @ApiProperty({ description: 'Username of the matched user', example: 'JohnPoker' })
+  username?: string;
+
+  @ApiProperty({ description: 'Match score (0-1)', example: 0.92 })
   score: number;
 
-  @ApiProperty({ description: 'Generated text summary of the matched profile' })
+  @ApiPropertyOptional({ description: 'Generated text summary of the matched profile' })
   generatedText?: string;
+
+  @ApiPropertyOptional({ description: 'Region of the matched user', example: 'Europe/Berlin' })
+  region?: string;
 }
 
 export class ProfileMatchResponseDto {

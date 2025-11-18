@@ -179,9 +179,15 @@ export class PersonalityService {
       // Create profile in MongoDB
       const profile = new this.profileModel({
         userId,
+        username: submitAnswersDto.username || `user_${userId}`,
+        avatar: submitAnswersDto.avatar,
+        bio: submitAnswersDto.bio,
+        region: submitAnswersDto.region,
         answers: submitAnswersDto.answers,
         vectorId,
         generatedText,
+        testResults: submitAnswersDto.testResults,
+        weights: submitAnswersDto.weights,
         createdAt: new Date(),
       });
       await profile.save();
@@ -235,6 +241,12 @@ export class PersonalityService {
       // Update profile in MongoDB
       profile.answers = submitAnswersDto.answers;
       profile.generatedText = generatedText;
+      if (submitAnswersDto.username) profile.username = submitAnswersDto.username;
+      if (submitAnswersDto.avatar) profile.avatar = submitAnswersDto.avatar;
+      if (submitAnswersDto.bio) profile.bio = submitAnswersDto.bio;
+      if (submitAnswersDto.region) profile.region = submitAnswersDto.region;
+      if (submitAnswersDto.testResults) profile.testResults = submitAnswersDto.testResults;
+      if (submitAnswersDto.weights) profile.weights = submitAnswersDto.weights;
       profile.updatedAt = new Date();
       await profile.save();
 
@@ -301,7 +313,7 @@ export class PersonalityService {
         with_payload: true,
       });
 
-      // Filter out user's own profile and map to DTOs
+      // Filter out user's own profile and map to DTOs with regional boost
       const matches: ProfileMatchDto[] = [];
 
       for (const result of searchResults) {
@@ -316,14 +328,27 @@ export class PersonalityService {
         const matchedProfile = await this.profileModel.findOne({ userId: matchedUserId }).exec();
 
         if (matchedProfile) {
+          let finalScore = result.score;
+
+          // Regional matching boost: +10% if same region
+          if (userProfile.region && matchedProfile.region && userProfile.region === matchedProfile.region) {
+            finalScore = Math.min(finalScore * 1.1, 1.0); // Cap at 1.0
+            this.logger.log(`Regional match boost for ${matchedUserId} (${matchedProfile.region})`);
+          }
+
           matches.push({
             profileId: matchedProfile._id.toString(),
             userId: matchedUserId,
-            score: result.score,
+            score: finalScore,
             generatedText: matchedProfile.generatedText,
+            region: matchedProfile.region,
+            username: matchedProfile.username,
           });
         }
       }
+
+      // Sort by score descending after applying regional boost
+      matches.sort((a, b) => b.score - a.score);
 
       this.logger.log(`Found ${matches.length} matches for user ${userId}`);
       return matches.slice(0, limit); // Ensure we return exactly 'limit' matches
@@ -415,6 +440,165 @@ Schreibe die Zusammenfassung in der dritten Person ("Diese Person sucht...", "Si
       return response.data[0].embedding;
     } catch (error) {
       this.logger.error(`Failed to generate embedding: ${error.message}`);
+      throw error;
+    }
+  }
+
+  // ============ Statistics Methods ============
+
+  async getPublicStatistics(userId: string): Promise<any> {
+    try {
+      const profile = await this.profileModel.findOne({ userId }).exec();
+      if (!profile) {
+        throw new NotFoundException(`Profile for user ${userId} not found`);
+      }
+
+      const winRate = profile.totalGamesPlayed > 0
+        ? (profile.totalWins / profile.totalGamesPlayed) * 100
+        : 0;
+
+      return {
+        userId: profile.userId,
+        username: profile.username,
+        avatar: profile.avatar,
+        bio: profile.bio,
+        region: profile.region,
+        rank: profile.rank,
+        totalWins: profile.totalWins,
+        totalGamesPlayed: profile.totalGamesPlayed,
+        tournamentParticipations: profile.tournamentParticipations,
+        workshopsAttended: profile.workshopsAttended,
+        workshopCompletions: profile.workshopCompletions,
+        totalActivityDays: profile.totalActivityDays,
+        currentStreak: profile.currentStreak,
+        longestStreak: profile.longestStreak,
+        lastActiveDate: profile.lastActiveDate,
+        winRate: Math.round(winRate * 100) / 100,
+        createdAt: profile.createdAt,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get public statistics: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async getPrivateStatistics(userId: string, requestingUserId: string, isAdmin: boolean = false): Promise<any> {
+    try {
+      // Check authorization: only owner or admin can see private stats
+      if (userId !== requestingUserId && !isAdmin) {
+        throw new BadRequestException('Unauthorized to view private statistics');
+      }
+
+      const profile = await this.profileModel.findOne({ userId }).exec();
+      if (!profile) {
+        throw new NotFoundException(`Profile for user ${userId} not found`);
+      }
+
+      const publicStats = await this.getPublicStatistics(userId);
+
+      // Convert activityDays Map to plain object
+      const activityDaysObject = profile.activityDays
+        ? Object.fromEntries(profile.activityDays)
+        : {};
+
+      return {
+        ...publicStats,
+        participatingEvents: profile.participatingEvents,
+        pastEvents: profile.pastEvents,
+        totalHoursPlayed: profile.totalHoursPlayed,
+        matchesFound: profile.matchesFound,
+        testResults: profile.testResults,
+        weights: profile.weights,
+        activityDays: activityDaysObject,
+        isActive: profile.isActive,
+        updatedAt: profile.updatedAt,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get private statistics: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async getGlobalStatistics(): Promise<any> {
+    try {
+      const totalProfiles = await this.profileModel.countDocuments().exec();
+
+      // Active profiles (last 30 days)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const activeProfiles = await this.profileModel
+        .countDocuments({ lastActiveDate: { $gte: thirtyDaysAgo } })
+        .exec();
+
+      // Aggregate statistics
+      const aggregateStats = await this.profileModel.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalGamesPlayed: { $sum: '$totalGamesPlayed' },
+            totalWorkshopsAttended: { $sum: { $size: '$workshopsAttended' } },
+            avgRank: { $avg: '$rank' },
+          },
+        },
+      ]);
+
+      const stats = aggregateStats[0] || {
+        totalGamesPlayed: 0,
+        totalWorkshopsAttended: 0,
+        avgRank: 0,
+      };
+
+      // Top ranked profiles
+      const topRanked = await this.profileModel
+        .find()
+        .sort({ rank: -1 })
+        .limit(10)
+        .exec();
+
+      const topRankedStats = await Promise.all(
+        topRanked.map(p => this.getPublicStatistics(p.userId)),
+      );
+
+      // Most active profiles (by current streak)
+      const mostActive = await this.profileModel
+        .find()
+        .sort({ currentStreak: -1 })
+        .limit(10)
+        .exec();
+
+      const mostActiveStats = await Promise.all(
+        mostActive.map(p => this.getPublicStatistics(p.userId)),
+      );
+
+      // Regional distribution
+      const regionalData = await this.profileModel.aggregate([
+        {
+          $group: {
+            _id: '$region',
+            count: { $sum: 1 },
+          },
+        },
+      ]);
+
+      const regionalDistribution = regionalData.reduce((acc, item) => {
+        if (item._id) {
+          acc[item._id] = item.count;
+        }
+        return acc;
+      }, {});
+
+      return {
+        totalProfiles,
+        activeProfiles,
+        totalGamesPlayed: stats.totalGamesPlayed,
+        totalWorkshopsAttended: stats.totalWorkshopsAttended,
+        averageRank: Math.round(stats.avgRank * 100) / 100,
+        topRanked: topRankedStats,
+        mostActive: mostActiveStats,
+        regionalDistribution,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get global statistics: ${error.message}`);
       throw error;
     }
   }

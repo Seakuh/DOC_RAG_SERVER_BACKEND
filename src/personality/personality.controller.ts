@@ -17,6 +17,7 @@ import { Public } from '../common/decorators/public.decorator';
 import { CreateQuestionDto } from './dto/create-question.dto';
 import { SubmitAnswersDto } from './dto/submit-answers.dto';
 import { ProfileMatchResponseDto } from './dto/profile-match.dto';
+import { PublicStatisticsDto, PrivateStatisticsDto, GlobalStatisticsDto } from './dto/statistics.dto';
 
 interface JwtPayload {
   userId: string;
@@ -152,5 +153,50 @@ export class PersonalityController {
       matches,
       totalMatches: matches.length,
     };
+  }
+
+  // ============ Statistics Endpoints ============
+
+  @Get('statistics/global')
+  @Public()
+  @ApiOperation({ summary: 'Get global statistics (public)' })
+  @ApiResponse({ status: 200, description: 'Global statistics', type: GlobalStatisticsDto })
+  async getGlobalStatistics() {
+    return this.personalityService.getGlobalStatistics();
+  }
+
+  @Get('statistics/public/:userId')
+  @Public()
+  @ApiOperation({ summary: 'Get public statistics for a user' })
+  @ApiResponse({ status: 200, description: 'Public statistics', type: PublicStatisticsDto })
+  @ApiResponse({ status: 404, description: 'Profile not found' })
+  async getPublicStatistics(@Param('userId') userId: string) {
+    return this.personalityService.getPublicStatistics(userId);
+  }
+
+  @Get('statistics/private/:userId')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get private statistics for a user (owner or admin only)' })
+  @ApiQuery({ name: 'isAdmin', required: false, type: Boolean, description: 'Is admin request' })
+  @ApiResponse({ status: 200, description: 'Private statistics', type: PrivateStatisticsDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Profile not found' })
+  async getPrivateStatistics(
+    @Param('userId') userId: string,
+    @User() user: JwtPayload,
+    @Query('isAdmin') isAdmin?: string,
+  ) {
+    const isAdminRequest = isAdmin === 'true';
+    return this.personalityService.getPrivateStatistics(userId, user.userId, isAdminRequest);
+  }
+
+  @Get('statistics/me')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get own private statistics' })
+  @ApiResponse({ status: 200, description: 'Private statistics', type: PrivateStatisticsDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Profile not found' })
+  async getOwnStatistics(@User() user: JwtPayload) {
+    return this.personalityService.getPrivateStatistics(user.userId, user.userId, false);
   }
 }
