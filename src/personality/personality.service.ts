@@ -255,19 +255,26 @@ export class PersonalityService {
   async findMatches(userId: string, limit: number = 10): Promise<ProfileMatchDto[]> {
     try {
       // Get user's profile
-      const userProfile = await this.getProfile(userId);
-
-      // Get user's vector
-      const vectorData = await this.qdrantClient.retrieve(this.collectionName, {
-        ids: [userProfile.vectorId],
-        with_vector: true,
-      });
-
-      if (!vectorData || vectorData.length === 0) {
-        throw new NotFoundException('User vector not found in Qdrant');
+      let userProfile;
+      try {
+        userProfile = await this.getProfile(userId);
+      } catch (error) {
+        if (error instanceof NotFoundException) {
+          this.logger.warn(`No profile found for user ${userId}`);
+          return []; // Return empty array if no profile exists
+        }
+        throw error;
       }
 
-      const userVector = vectorData[0].vector as number[];
+      // Check if profile text exists
+      if (!userProfile.generatedText || userProfile.generatedText.trim().length === 0) {
+        this.logger.warn(`Profile for user ${userId} has no generated text yet`);
+        return []; // Return empty array if no profile text exists
+      }
+
+      // Generate embedding from the profile text (avoids UUID retrieve issue)
+      const userVector = await this.generateEmbedding(userProfile.generatedText);
+      this.logger.log(`Generated search vector for user ${userId}`);
 
       // Search for similar vectors
       const searchResults = await this.qdrantClient.search(this.collectionName, {
