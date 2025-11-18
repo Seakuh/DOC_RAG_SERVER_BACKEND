@@ -77,7 +77,14 @@ export class QdrantService implements OnModuleInit {
     }
   }
 
+  private checkQdrantAvailability(): void {
+    if (!this.qdrantAvailable) {
+      throw new Error('Qdrant service is not available. Please ensure Qdrant is running.');
+    }
+  }
+
   async upsertVectors(vectors: QdrantVector[]): Promise<void> {
+    this.checkQdrantAvailability();
     try {
       this.logger.log(`Preparing to upsert ${vectors.length} vectors`);
 
@@ -137,6 +144,7 @@ export class QdrantService implements OnModuleInit {
     limit: number = 5,
     filter?: Record<string, any>
   ): Promise<QdrantSearchResult[]> {
+    this.checkQdrantAvailability();
     try {
       const searchRequest: any = {
         vector: queryVector,
@@ -162,6 +170,7 @@ export class QdrantService implements OnModuleInit {
   }
 
   async deleteVector(id: string | number): Promise<void> {
+    this.checkQdrantAvailability();
     try {
       await this.client.delete(this.collectionName, {
         points: [id],
@@ -174,6 +183,7 @@ export class QdrantService implements OnModuleInit {
   }
 
   async deleteCollection(): Promise<void> {
+    this.checkQdrantAvailability();
     try {
       await this.client.deleteCollection(this.collectionName);
       this.logger.log(`Deleted collection: ${this.collectionName}`);
@@ -184,6 +194,7 @@ export class QdrantService implements OnModuleInit {
   }
 
   async getCollectionInfo(): Promise<any> {
+    this.checkQdrantAvailability();
     try {
       const info = await this.client.getCollection(this.collectionName);
       return info;
