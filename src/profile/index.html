@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Noise Berg – p5.js</title>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+  </head>
+  <body>
+    <script>
+      let cols, rows;
+      let scl = 20;        // Abstand zwischen Punkten
+      let w = 1600;        // Breite des Terrains im Raum
+      let h = 1200;        // Tiefe des Terrains im Raum
+
+      let flying = 0;      // Für leichte Animation / "Atmen" des Berges
+      let terrain = [];
+
+      function setup() {
+        createCanvas(windowWidth, windowHeight, WEBGL);
+
+        cols = w / scl;
+        rows = h / scl;
+
+        terrain = new Array(cols);
+        for (let x = 0; x < cols; x++) {
+          terrain[x] = new Array(rows);
+        }
+
+        noStroke();
+      }
+
+      function draw() {
+        background(15);       // dunkler Hintergrund
+        orbitControl();       // Maus zum Drehen / Zoomen benutzen
+
+        // Licht & Material
+        directionalLight(255, 255, 255, 0.5, 1, -0.5);
+        ambientLight(70);
+        ambientMaterial(150);
+
+        // Leichte Animation im Noise
+        flying -= 0.01;
+
+        let yoff = flying;
+        for (let y = 0; y < rows; y++) {
+          let xoff = 0;
+          for (let x = 0; x < cols; x++) {
+            // Perlin-Noise Höhe
+            let n = noise(xoff, yoff);
+            let height = map(n, 0, 1, -120, 220); // Tal / Gipfel
+            terrain[x][y] = height;
+            xoff += 0.15;
+          }
+          yoff += 0.15;
+        }
+
+        // Szene zentrieren
+        rotateX(PI / 3);
+        translate(-w / 2, -h / 2);
+
+        // Berg zeichnen
+        for (let y = 0; y < rows - 1; y++) {
+          beginShape(TRIANGLE_STRIP);
+          for (let x = 0; x < cols; x++) {
+            let h1 = terrain[x][y];
+            let h2 = terrain[x][y + 1];
+
+            // Farbe abhängig von Höhe (ein bisschen "Low Poly" Feeling)
+            let c1 = map(h1, -120, 220, 40, 255);
+            let c2 = map(h2, -120, 220, 40, 255);
+
+            fill(c1 * 0.5, c1 * 0.8, c1); // kühle Bergfarben
+            vertex(x * scl, y * scl, h1);
+
+            fill(c2 * 0.5, c2 * 0.8, c2);
+            vertex(x * scl, (y + 1) * scl, h2);
+          }
+          endShape();
+        }
+      }
+
+      function windowResized() {
+        resizeCanvas(windowWidth, windowHeight);
+      }
+    </script>
+  </body>
+</html>

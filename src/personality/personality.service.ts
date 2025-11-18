@@ -17,6 +17,7 @@ export class PersonalityService {
   private qdrantClient: QdrantClient;
   private openai: OpenAI;
   private readonly collectionName = 'personality-profiles';
+  private qdrantAvailable = false;
 
   constructor(
     @InjectModel(Question.name) private questionModel: Model<QuestionDocument>,
@@ -67,9 +68,12 @@ export class PersonalityService {
       } else {
         this.logger.log(`Qdrant collection ${this.collectionName} already exists`);
       }
+      this.qdrantAvailable = true;
     } catch (error) {
       this.logger.error(`Failed to ensure collection: ${error.message}`);
-      throw error;
+      this.logger.warn('Qdrant may not be available. Profile matching features will be disabled.');
+      this.qdrantAvailable = false;
+      // Don't throw - allow the service to start without Qdrant
     }
   }
 
@@ -152,21 +156,25 @@ export class PersonalityService {
       // Generate unique vector ID
       const vectorId = uuidv4();
 
-      // Store vector in Qdrant
-      await this.qdrantClient.upsert(this.collectionName, {
-        wait: true,
-        points: [
-          {
-            id: vectorId,
-            vector: embedding,
-            payload: {
-              userId,
-              createdAt: new Date().toISOString(),
+      // Store vector in Qdrant (if available)
+      if (this.qdrantAvailable) {
+        await this.qdrantClient.upsert(this.collectionName, {
+          wait: true,
+          points: [
+            {
+              id: vectorId,
+              vector: embedding,
+              payload: {
+                userId,
+                createdAt: new Date().toISOString(),
+              },
             },
-          },
-        ],
-      });
-      this.logger.log(`Stored vector in Qdrant: ${vectorId}`);
+          ],
+        });
+        this.logger.log(`Stored vector in Qdrant: ${vectorId}`);
+      } else {
+        this.logger.warn('Qdrant not available - skipping vector storage');
+      }
 
       // Create profile in MongoDB
       const profile = new this.profileModel({
@@ -205,20 +213,24 @@ export class PersonalityService {
       const generatedText = await this.generateProfileText(submitAnswersDto.answers, questions);
       const embedding = await this.generateEmbedding(generatedText);
 
-      // Update vector in Qdrant
-      await this.qdrantClient.upsert(this.collectionName, {
-        wait: true,
-        points: [
-          {
-            id: profile.vectorId,
-            vector: embedding,
-            payload: {
-              userId,
-              updatedAt: new Date().toISOString(),
+      // Update vector in Qdrant (if available)
+      if (this.qdrantAvailable) {
+        await this.qdrantClient.upsert(this.collectionName, {
+          wait: true,
+          points: [
+            {
+              id: profile.vectorId,
+              vector: embedding,
+              payload: {
+                userId,
+                updatedAt: new Date().toISOString(),
+              },
             },
-          },
-        ],
-      });
+          ],
+        });
+      } else {
+        this.logger.warn('Qdrant not available - skipping vector update');
+      }
 
       // Update profile in MongoDB
       profile.answers = submitAnswersDto.answers;
@@ -254,6 +266,12 @@ export class PersonalityService {
 
   async findMatches(userId: string, limit: number = 10): Promise<ProfileMatchDto[]> {
     try {
+      // Check if Qdrant is available
+      if (!this.qdrantAvailable) {
+        this.logger.warn('Qdrant not available - cannot perform profile matching');
+        throw new BadRequestException('Profile matching service is currently unavailable. Please ensure Qdrant is running.');
+      }
+
       // Get user's profile
       let userProfile;
       try {
