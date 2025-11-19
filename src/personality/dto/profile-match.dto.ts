@@ -10,6 +10,9 @@ export class ProfileMatchDto {
   @ApiProperty({ description: 'Username of the matched user', example: 'JohnPoker' })
   username?: string;
 
+  @ApiPropertyOptional({ description: 'Profile image URL of the matched user' })
+  avatar?: string;
+
   @ApiProperty({ description: 'Match score (0-1)', example: 0.92 })
   score: number;
 
@@ -18,6 +21,9 @@ export class ProfileMatchDto {
 
   @ApiPropertyOptional({ description: 'Region of the matched user', example: 'Europe/Berlin' })
   region?: string;
+
+  @ApiPropertyOptional({ description: 'Bio of the matched user' })
+  bio?: string;
 }
 
 export class ProfileMatchResponseDto {

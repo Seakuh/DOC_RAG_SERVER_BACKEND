@@ -343,6 +343,8 @@ export class PersonalityService {
             generatedText: matchedProfile.generatedText,
             region: matchedProfile.region,
             username: matchedProfile.username,
+            avatar: matchedProfile.profileImageUrl || matchedProfile.avatar,
+            bio: matchedProfile.bio,
           });
         }
       }
@@ -460,7 +462,7 @@ Schreibe die Zusammenfassung in der dritten Person ("Diese Person sucht...", "Si
       return {
         userId: profile.userId,
         username: profile.username,
-        avatar: profile.avatar,
+        avatar: profile.profileImageUrl || profile.avatar,
         bio: profile.bio,
         region: profile.region,
         rank: profile.rank,
