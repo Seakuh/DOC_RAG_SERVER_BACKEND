@@ -3,6 +3,16 @@ import { Document } from 'mongoose';
 
 export type QuestionDocument = Question & Document;
 
+export interface QuestionOption {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+export interface ScaleLabels {
+  [key: string]: string;
+}
+
 @Schema()
 export class Question {
   @Prop({ required: true, unique: true })
@@ -13,12 +23,33 @@ export class Question {
 
   @Prop({
     required: true,
-    enum: ['multiple_choice', 'single_choice', 'text'],
+    enum: ['multiple_choice', 'single_choice', 'single_choice_other', 'multi_choice', 'text', 'free_text', 'scale_1_5'],
   })
   type: string;
 
-  @Prop({ type: [String], required: true })
+  @Prop({ type: [String], required: false })
   options: string[];
+
+  @Prop({ type: Object, required: false })
+  structuredOptions?: QuestionOption[];
+
+  @Prop({ required: false })
+  dimension?: string;
+
+  @Prop({ required: false })
+  section?: string;
+
+  @Prop({ required: false })
+  sectionTitle?: string;
+
+  @Prop({ required: false })
+  sectionDescription?: string;
+
+  @Prop({ required: false })
+  scaleType?: string;
+
+  @Prop({ type: Object, required: false })
+  scaleLabels?: ScaleLabels;
 
   @Prop({ default: true })
   active: boolean;

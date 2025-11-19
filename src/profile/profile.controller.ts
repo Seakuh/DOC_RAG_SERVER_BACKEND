@@ -29,7 +29,6 @@ interface JwtPayload {
 }
 
 @Controller('profile')
-@UseGuards(JwtAuthGuard)
 export class ProfileController {
   constructor(private readonly profileService: ProfileService) {}
 
