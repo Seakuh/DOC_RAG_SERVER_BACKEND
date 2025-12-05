@@ -6,7 +6,7 @@ export class ImageGenService {
   private readonly replicate: any;
 
   constructor() {
-    const token = process.env.REPLICATE_API_TOKEN;
+    const token = process.env.REPLICATE_API_TOKEN || '';
     if (!token) {
       throw new Error('Missing REPLICATE_API_TOKEN');
     }

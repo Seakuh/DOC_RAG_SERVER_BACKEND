@@ -31,18 +31,21 @@ export class QdrantUploadService {
     const apiKey = this.configService.get<string>('QDRANT_API_KEY');
     const apiUrl = this.configService.get<string>('QDRANT_API_URL');
 
-    if (!apiKey || !apiUrl) {
+    if (!apiUrl) {
       throw new Error(
-        'QDRANT_API_KEY and QDRANT_API_URL must be configured',
+        'QDRANT_API_URL must be configured',
       );
     }
 
-    this.client = new QdrantClient({
-      url: apiUrl,
-      apiKey: apiKey,
-    });
+    // For local Qdrant, API key is optional
+    const clientConfig: any = { url: apiUrl };
+    if (apiKey) {
+      clientConfig.apiKey = apiKey;
+    }
 
-    this.logger.log('Qdrant Upload Service initialized');
+    this.client = new QdrantClient(clientConfig);
+
+    this.logger.log(`Qdrant Upload Service initialized (URL: ${apiUrl})`);
   }
 
   async processAndUploadFiles(
