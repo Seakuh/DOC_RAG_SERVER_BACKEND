@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terpene & Cannabis RAG System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f5f5f5;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+            border: none;
+            background: transparent;
+            font-size: 1em;
+        }
+
+        .tab:hover {
+            background: #e0e0e0;
+        }
+
+        .tab.active {
+            background: white;
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 30px;
+            animation: fadeIn 0.5s;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .section {
+            margin-bottom: 30px;
+            padding: 25px;
+            background: #f9f9f9;
+            border-radius: 15px;
+            border: 2px solid #e0e0e0;
+        }
+
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input[type="text"],
+        input[type="file"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+            font-family: inherit;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 14px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .results {
+            margin-top: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            border: 2px solid #667eea;
+            display: none;
+        }
+
+        .results.show {
+            display: block;
+            animation: slideIn 0.5s;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .result-item {
+            padding: 15px;
+            margin-bottom: 15px;
+            background: #f0f4ff;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .result-item h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.3em;
+        }
+
+        .result-item p {
+            color: #555;
+            line-height: 1.6;
+            margin-bottom: 8px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 5px 12px;
+            background: #667eea;
+            color: white;
+            border-radius: 20px;
+            font-size: 0.85em;
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+
+        .score {
+            float: right;
+            background: #4caf50;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .alert.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .file-upload {
+            border: 2px dashed #667eea;
+            padding: 30px;
+            text-align: center;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .file-upload:hover {
+            background: #f0f4ff;
+        }
+
+        .file-upload.dragover {
+            background: #e8eeff;
+            border-color: #764ba2;
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 15px;
+            background: #e8eeff;
+            border-radius: 20px;
+            margin: 5px;
+            font-size: 0.9em;
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .icon {
+            font-size: 1.5em;
+            margin-right: 10px;
+        }
+
+        .sources {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff9e6;
+            border-radius: 8px;
+            border-left: 4px solid #ffc107;
+        }
+
+        .sources h4 {
+            color: #ff9800;
+            margin-bottom: 10px;
+        }
+
+        .source-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 5px;
+        }
+
+        footer {
+            text-align: center;
+            padding: 20px;
+            background: #f5f5f5;
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌿 Terpene & Cannabis RAG System</h1>
+            <p>Strain-Suche, Dokument-Upload und KI-gestützte Terpen-Fragen</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('strains')">
+                <span class="icon">🔍</span> Strain-Suche
+            </button>
+            <button class="tab" onclick="switchTab('upload')">
+                <span class="icon">📄</span> Dokumente hochladen
+            </button>
+            <button class="tab" onclick="switchTab('terpenes')">
+                <span class="icon">💬</span> Terpenen-Fragen
+            </button>
+            <button class="tab" onclick="switchTab('browser')">
+                <span class="icon">📚</span> Browser
+            </button>
+        </div>
+
+        <!-- Strain Search Tab -->
+        <div id="strains" class="tab-content active">
+            <div class="section">
+                <h2><span class="icon">🔍</span> Cannabis Strain Suche</h2>
+
+                <div class="form-group">
+                    <label for="strainSearch">Strain nach Name suchen:</label>
+                    <input type="text" id="strainSearch" placeholder="z.B. Blue Dream, OG Kush...">
+                </div>
+
+                <button onclick="searchStrains()">Suchen</button>
+
+                <div id="strainAlert" class="alert"></div>
+                <div id="strainLoading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Suche Strains...</p>
+                </div>
+                <div id="strainResults" class="results"></div>
+            </div>
+
+            <div class="section">
+                <h2><span class="icon">🎭</span> Mood-basierte Empfehlung</h2>
+
+                <div class="form-group">
+                    <label for="moodDescription">Beschreibe deine aktuelle Stimmung:</label>
+                    <textarea id="moodDescription" placeholder="z.B. Ich fühle mich gestresst nach einem langen Arbeitstag und möchte mich entspannen..."></textarea>
+                </div>
+
+                <button onclick="getMoodRecommendation()">Empfehlung erhalten</button>
+
+                <div id="moodAlert" class="alert"></div>
+                <div id="moodLoading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Analysiere Stimmung und suche passende Strains...</p>
+                </div>
+                <div id="moodResults" class="results"></div>
+            </div>
+        </div>
+
+        <!-- Document Upload Tab -->
+        <div id="upload" class="tab-content">
+            <div class="section">
+                <h2><span class="icon">📄</span> Dokumente für RAG hochladen</h2>
+
+                <p style="margin-bottom: 20px; color: #666;">
+                    Laden Sie Terpenen-Profile, Forschungspapiere oder andere Dokumente hoch.
+                    Unterstützte Formate: PDF, DOCX, TXT, Bilder (mit OCR)
+                </p>
+
+                <div class="file-upload" id="fileUploadArea"
+                     ondrop="handleDrop(event)"
+                     ondragover="handleDragOver(event)"
+                     ondragleave="handleDragLeave(event)"
+                     onclick="document.getElementById('fileInput').click()">
+                    <div style="font-size: 3em; margin-bottom: 10px;">📁</div>
+                    <p style="font-size: 1.2em; margin-bottom: 10px;">Dateien hier ablegen oder klicken zum Auswählen</p>
+                    <p style="color: #666; font-size: 0.9em;">PDF, DOCX, TXT, JPG, PNG, GIF, BMP, TIFF, WEBP</p>
+                    <input type="file" id="fileInput" style="display: none"
+                           accept=".pdf,.docx,.txt,.jpg,.jpeg,.png,.gif,.bmp,.tiff,.webp"
+                           onchange="handleFileSelect(event)">
+                </div>
+
+                <div id="uploadAlert" class="alert"></div>
+                <div id="uploadLoading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Datei wird hochgeladen und verarbeitet...</p>
+                </div>
+                <div id="uploadResults" class="results"></div>
+            </div>
+
+            <div class="section">
+                <h2><span class="icon">📚</span> Hochgeladene Dokumente</h2>
+                <button onclick="loadDocuments()">Dokumente laden</button>
+                <div id="documentsLoading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Lade Dokumente...</p>
+                </div>
+                <div id="documentsList" class="grid"></div>
+            </div>
+        </div>
+
+        <!-- Terpenes Questions Tab -->
+        <div id="terpenes" class="tab-content">
+            <div class="section">
+                <h2><span class="icon">💬</span> Fragen zu Terpenen stellen</h2>
+
+                <p style="margin-bottom: 20px; color: #666;">
+                    Stellen Sie Fragen zu Terpenen und erhalten Sie KI-gestützte Antworten basierend auf
+                    den hochgeladenen Dokumenten und der Terpenen-Datenbank.
+                </p>
+
+                <div class="form-group">
+                    <label for="terpeneQuestion">Ihre Frage:</label>
+                    <textarea id="terpeneQuestion" placeholder="z.B. Was sind die medizinischen Vorteile von Myrcen? Welche Terpene haben entspannende Wirkung?"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="topK">Anzahl der Ergebnisse:</label>
+                    <select id="topK">
+                        <option value="3">3</option>
+                        <option value="5" selected>5</option>
+                        <option value="10">10</option>
+                    </select>
+                </div>
+
+                <button onclick="askTerpeneQuestion()">Frage stellen</button>
+
+                <div id="terpeneAlert" class="alert"></div>
+                <div id="terpeneLoading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Verarbeite Frage und suche in der Datenbank...</p>
+                </div>
+                <div id="terpeneResults" class="results"></div>
+            </div>
+        </div>
+
+        <!-- Browser Tab -->
+        <div id="browser" class="tab-content">
+            <div class="section">
+                <h2><span class="icon">🌿</span> Alle Terpene</h2>
+                <button onclick="loadAllTerpenes()">Alle Terpene laden</button>
+                <div id="terpenesLoading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Lade Terpene...</p>
+                </div>
+                <div id="terpenesList" class="grid"></div>
+            </div>
+
+            <div class="section">
+                <h2><span class="icon">🔬</span> Terpene nach Name suchen</h2>
+                <div class="form-group">
+                    <label for="terpeneNameSearch">Terpene Name:</label>
+                    <input type="text" id="terpeneNameSearch" placeholder="z.B. Myrcene, Limonene...">
+                </div>
+                <button onclick="searchTerpeneByName()">Suchen</button>
+                <div id="terpeneSearchAlert" class="alert"></div>
+                <div id="terpeneSearchLoading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Suche Terpene...</p>
+                </div>
+                <div id="terpeneSearchResults" class="results"></div>
+            </div>
+        </div>
+
+        <footer>
+            <p>🌿 Terpene & Cannabis RAG System v1.0 | Powered by OpenAI & Qdrant</p>
+        </footer>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000/api/v1';
+
+        // Tab Switching
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.closest('.tab').classList.add('active');
+        }
+
+        // Utility functions
+        function showLoading(elementId) {
+            document.getElementById(elementId).classList.add('show');
+        }
+
+        function hideLoading(elementId) {
+            document.getElementById(elementId).classList.remove('show');
+        }
+
+        function showAlert(elementId, message, type = 'success') {
+            const alert = document.getElementById(elementId);
+            alert.textContent = message;
+            alert.className = `alert ${type} show`;
+            setTimeout(() => alert.classList.remove('show'), 5000);
+        }
+
+        function showResults(elementId) {
+            document.getElementById(elementId).classList.add('show');
+        }
+
+        // Strain Search
+        async function searchStrains() {
+            const searchQuery = document.getElementById('strainSearch').value.trim();
+            if (!searchQuery) {
+                showAlert('strainAlert', 'Bitte geben Sie einen Strain-Namen ein', 'error');
+                return;
+            }
+
+            showLoading('strainLoading');
+            document.getElementById('strainResults').classList.remove('show');
+
+            try {
+                const response = await fetch(`${API_BASE}/cannabis/strains`);
+                const strains = await response.json();
+
+                const filtered = strains.filter(strain =>
+                    strain.name.toLowerCase().includes(searchQuery.toLowerCase())
+                );
+
+                hideLoading('strainLoading');
+
+                if (filtered.length === 0) {
+                    showAlert('strainAlert', 'Keine Strains gefunden', 'error');
+                    return;
+                }
+
+                displayStrains(filtered, 'strainResults');
+                showAlert('strainAlert', `${filtered.length} Strain(s) gefunden`, 'success');
+            } catch (error) {
+                hideLoading('strainLoading');
+                showAlert('strainAlert', `Fehler: ${error.message}`, 'error');
+            }
+        }
+
+        // Mood-based Recommendation
+        async function getMoodRecommendation() {
+            const moodDescription = document.getElementById('moodDescription').value.trim();
+            if (!moodDescription) {
+                showAlert('moodAlert', 'Bitte beschreiben Sie Ihre Stimmung', 'error');
+                return;
+            }
+
+            showLoading('moodLoading');
+            document.getElementById('moodResults').classList.remove('show');
+
+            try {
+                const response = await fetch(`${API_BASE}/cannabis/recommendations`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        moodDescription,
+                        context: 'general'
+                    })
+                });
+
+                if (!response.ok) throw new Error('Empfehlung fehlgeschlagen');
+
+                const data = await response.json();
+                hideLoading('moodLoading');
+
+                displayMoodRecommendation(data, 'moodResults');
+                showAlert('moodAlert', 'Empfehlung erfolgreich erstellt!', 'success');
+            } catch (error) {
+                hideLoading('moodLoading');
+                showAlert('moodAlert', `Fehler: ${error.message}`, 'error');
+            }
+        }
+
+        // File Upload
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('fileUploadArea').classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('fileUploadArea').classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.getElementById('fileUploadArea').classList.remove('dragover');
+
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                uploadFile(files[0]);
+            }
+        }
+
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            if (files.length > 0) {
+                uploadFile(files[0]);
+            }
+        }
+
+        async function uploadFile(file) {
+            showLoading('uploadLoading');
+            document.getElementById('uploadResults').classList.remove('show');
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`${API_BASE}/documents/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Upload fehlgeschlagen');
+
+                const data = await response.json();
+                hideLoading('uploadLoading');
+
+                const resultsDiv = document.getElementById('uploadResults');
+                resultsDiv.innerHTML = `
+                    <div class="result-item">
+                        <h3>✅ Datei erfolgreich hochgeladen</h3>
+                        <p><strong>Name:</strong> ${data.originalName}</p>
+                        <p><strong>Dokument ID:</strong> ${data.documentId}</p>
+                        <p><strong>Chunks erstellt:</strong> ${data.chunksCreated}</p>
+                        <p><strong>Größe:</strong> ${(file.size / 1024).toFixed(2)} KB</p>
+                    </div>
+                `;
+                showResults('uploadResults');
+                showAlert('uploadAlert', 'Dokument erfolgreich hochgeladen und verarbeitet!', 'success');
+
+                // Reset file input
+                document.getElementById('fileInput').value = '';
+            } catch (error) {
+                hideLoading('uploadLoading');
+                showAlert('uploadAlert', `Fehler: ${error.message}`, 'error');
+            }
+        }
+
+        // Load Documents
+        async function loadDocuments() {
+            showLoading('documentsLoading');
+            document.getElementById('documentsList').innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/documents`);
+                const documents = await response.json();
+
+                hideLoading('documentsLoading');
+
+                if (documents.length === 0) {
+                    document.getElementById('documentsList').innerHTML =
+                        '<p style="text-align: center; color: #666;">Keine Dokumente gefunden</p>';
+                    return;
+                }
+
+                displayDocuments(documents);
+            } catch (error) {
+                hideLoading('documentsLoading');
+                showAlert('uploadAlert', `Fehler beim Laden: ${error.message}`, 'error');
+            }
+        }
+
+        // Ask Terpene Question
+        async function askTerpeneQuestion() {
+            const question = document.getElementById('terpeneQuestion').value.trim();
+            const topK = parseInt(document.getElementById('topK').value);
+
+            if (!question) {
+                showAlert('terpeneAlert', 'Bitte geben Sie eine Frage ein', 'error');
+                return;
+            }
+
+            showLoading('terpeneLoading');
+            document.getElementById('terpeneResults').classList.remove('show');
+
+            try {
+                const response = await fetch(`${API_BASE}/terpenes/query`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question, topK })
+                });
+
+                if (!response.ok) throw new Error('Frage fehlgeschlagen');
+
+                const data = await response.json();
+                hideLoading('terpeneLoading');
+
+                displayTerpeneAnswer(data, 'terpeneResults');
+                showAlert('terpeneAlert', 'Antwort erfolgreich generiert!', 'success');
+            } catch (error) {
+                hideLoading('terpeneLoading');
+                showAlert('terpeneAlert', `Fehler: ${error.message}`, 'error');
+            }
+        }
+
+        // Load All Terpenes
+        async function loadAllTerpenes() {
+            showLoading('terpenesLoading');
+            document.getElementById('terpenesList').innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/terpenes`);
+                const terpenes = await response.json();
+
+                hideLoading('terpenesLoading');
+
+                if (terpenes.length === 0) {
+                    document.getElementById('terpenesList').innerHTML =
+                        '<p style="text-align: center; color: #666;">Keine Terpene gefunden</p>';
+                    return;
+                }
+
+                displayTerpenesList(terpenes);
+            } catch (error) {
+                hideLoading('terpenesLoading');
+                console.error('Error loading terpenes:', error);
+            }
+        }
+
+        // Search Terpene by Name
+        async function searchTerpeneByName() {
+            const name = document.getElementById('terpeneNameSearch').value.trim();
+            if (!name) {
+                showAlert('terpeneSearchAlert', 'Bitte geben Sie einen Terpene-Namen ein', 'error');
+                return;
+            }
+
+            showLoading('terpeneSearchLoading');
+            document.getElementById('terpeneSearchResults').classList.remove('show');
+
+            try {
+                const response = await fetch(`${API_BASE}/terpenes/search?name=${encodeURIComponent(name)}`);
+
+                if (!response.ok) throw new Error('Terpene nicht gefunden');
+
+                const terpene = await response.json();
+                hideLoading('terpeneSearchLoading');
+
+                displayTerpeneDetail(terpene, 'terpeneSearchResults');
+                showAlert('terpeneSearchAlert', 'Terpene gefunden!', 'success');
+            } catch (error) {
+                hideLoading('terpeneSearchLoading');
+                showAlert('terpeneSearchAlert', `Fehler: ${error.message}`, 'error');
+            }
+        }
+
+        // Display Functions
+        function displayStrains(strains, elementId) {
+            const html = strains.map(strain => `
+                <div class="result-item">
+                    <h3>${strain.name}</h3>
+                    <p><strong>Typ:</strong> <span class="badge">${strain.type || 'N/A'}</span></p>
+                    <p><strong>THC:</strong> ${strain.thc || 'N/A'}% | <strong>CBD:</strong> ${strain.cbd || 'N/A'}%</p>
+                    <p><strong>Effekte:</strong> ${(strain.effects || []).map(e => `<span class="chip">${e}</span>`).join('')}</p>
+                    <p><strong>Aromen:</strong> ${(strain.flavors || []).map(f => `<span class="chip">${f}</span>`).join('')}</p>
+                    ${strain.description ? `<p>${strain.description}</p>` : ''}
+                </div>
+            `).join('');
+
+            document.getElementById(elementId).innerHTML = html;
+            showResults(elementId);
+        }
+
+        function displayMoodRecommendation(data, elementId) {
+            const html = `
+                <div class="result-item">
+                    <h3>🎯 Empfohlene Strains für Ihre Stimmung</h3>
+                    <p style="background: white; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        ${data.analysis || data.recommendation || 'Empfehlung generiert'}
+                    </p>
+                    ${data.recommendedStrains ? `
+                        <h4 style="margin-top: 20px;">Top Empfehlungen:</h4>
+                        ${data.recommendedStrains.map(strain => `
+                            <div style="background: white; padding: 15px; margin: 10px 0; border-radius: 8px;">
+                                <h4 style="color: #667eea;">${strain.name}</h4>
+                                <p><strong>Match Score:</strong> <span class="badge">${(strain.score * 100).toFixed(1)}%</span></p>
+                                <p>${strain.description || ''}</p>
+                                <p><strong>Effekte:</strong> ${(strain.effects || []).map(e => `<span class="chip">${e}</span>`).join('')}</p>
+                            </div>
+                        `).join('')}
+                    ` : ''}
+                </div>
+            `;
+
+            document.getElementById(elementId).innerHTML = html;
+            showResults(elementId);
+        }
+
+        function displayDocuments(documents) {
+            const html = documents.map(doc => `
+                <div class="card">
+                    <h3>${doc.metadata?.originalName || 'Dokument'}</h3>
+                    <p><strong>Quelle:</strong> ${doc.metadata?.source || 'N/A'}</p>
+                    <p><strong>Hochgeladen:</strong> ${new Date(doc.createdAt).toLocaleDateString('de-DE')}</p>
+                    <p><strong>Chunks:</strong> ${doc.metadata?.totalChunks || 'N/A'}</p>
+                    ${doc.fileUrl ? `<p><a href="${doc.fileUrl}" target="_blank">📥 Download</a></p>` : ''}
+                </div>
+            `).join('');
+
+            document.getElementById('documentsList').innerHTML = html;
+        }
+
+        function displayTerpeneAnswer(data, elementId) {
+            const html = `
+                <div class="result-item">
+                    <h3>💬 Frage</h3>
+                    <p style="background: white; padding: 15px; border-radius: 8px;">${data.question}</p>
+
+                    <h3 style="margin-top: 20px;">🤖 Antwort</h3>
+                    <p style="background: white; padding: 15px; border-radius: 8px; line-height: 1.8;">
+                        ${data.answer}
+                    </p>
+
+                    ${data.sources && data.sources.length > 0 ? `
+                        <div class="sources">
+                            <h4>📚 Quellen</h4>
+                            ${data.sources.map(source => `
+                                <div class="source-item">
+                                    <strong>${source.name}</strong>
+                                    <span class="score">${(source.score * 100).toFixed(1)}%</span>
+                                    <p style="margin-top: 5px; color: #666;">${source.description}</p>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+
+            document.getElementById(elementId).innerHTML = html;
+            showResults(elementId);
+        }
+
+        function displayTerpenesList(terpenes) {
+            const html = terpenes.map(terpene => `
+                <div class="card">
+                    <h3>${terpene.name}</h3>
+                    <p>${terpene.description || 'Keine Beschreibung verfügbar'}</p>
+                    ${terpene.aromas ? `<p><strong>Aromen:</strong> ${terpene.aromas.map(a => `<span class="chip">${a}</span>`).join('')}</p>` : ''}
+                    ${terpene.effects ? `<p><strong>Effekte:</strong> ${terpene.effects.map(e => `<span class="chip">${e}</span>`).join('')}</p>` : ''}
+                    ${terpene.medicalBenefits ? `<p><strong>Med. Vorteile:</strong> ${terpene.medicalBenefits.map(b => `<span class="badge">${b}</span>`).join('')}</p>` : ''}
+                    ${terpene.boilingPoint ? `<p><strong>Siedepunkt:</strong> ${terpene.boilingPoint}°C</p>` : ''}
+                </div>
+            `).join('');
+
+            document.getElementById('terpenesList').innerHTML = html;
+        }
+
+        function displayTerpeneDetail(terpene, elementId) {
+            const html = `
+                <div class="result-item">
+                    <h3>${terpene.name}</h3>
+                    ${terpene.molecularFormula ? `<p><strong>Molekülformel:</strong> ${terpene.molecularFormula}</p>` : ''}
+                    <p style="margin: 15px 0;">${terpene.description || 'Keine Beschreibung verfügbar'}</p>
+
+                    ${terpene.aromas && terpene.aromas.length > 0 ? `
+                        <p><strong>Aromen:</strong><br>${terpene.aromas.map(a => `<span class="chip">${a}</span>`).join('')}</p>
+                    ` : ''}
+
+                    ${terpene.effects && terpene.effects.length > 0 ? `
+                        <p><strong>Effekte:</strong><br>${terpene.effects.map(e => `<span class="chip">${e}</span>`).join('')}</p>
+                    ` : ''}
+
+                    ${terpene.medicalBenefits && terpene.medicalBenefits.length > 0 ? `
+                        <p><strong>Medizinische Vorteile:</strong><br>${terpene.medicalBenefits.map(b => `<span class="badge">${b}</span>`).join('')}</p>
+                    ` : ''}
+
+                    ${terpene.boilingPoint ? `<p><strong>Siedepunkt:</strong> ${terpene.boilingPoint}°C</p>` : ''}
+
+                    ${terpene.alsoFoundIn && terpene.alsoFoundIn.length > 0 ? `
+                        <p><strong>Auch gefunden in:</strong> ${terpene.alsoFoundIn.join(', ')}</p>
+                    ` : ''}
+
+                    ${terpene.relatedStrains && terpene.relatedStrains.length > 0 ? `
+                        <p><strong>Verwandte Strains:</strong> ${terpene.relatedStrains.length}</p>
+                    ` : ''}
+                </div>
+            `;
+
+            document.getElementById(elementId).innerHTML = html;
+            showResults(elementId);
+        }
+
+        // Initialize
+        console.log('🌿 Terpene & Cannabis RAG System initialized');
+        console.log('API Base:', API_BASE);
+    </script>
+</body>
+</html>

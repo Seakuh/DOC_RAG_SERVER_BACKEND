@@ -152,9 +152,37 @@ Antworten Sie auf Deutsch, es sei denn, die Frage wurde in einer anderen Sprache
     return Math.round(confidence * 100) / 100; // Round to 2 decimal places
   }
 
+  async generateSimpleResponse(
+    userPrompt: string,
+    systemPrompt?: string,
+    options: { maxTokens?: number; temperature?: number } = {}
+  ): Promise<string> {
+    try {
+      const { maxTokens = 800, temperature = 0.7 } = options;
+
+      const response = await this.openai.chat.completions.create({
+        model: this.configService.get<string>('OPENAI_MODEL', 'gpt-4'),
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt || 'You are a helpful AI assistant.'
+          },
+          { role: 'user', content: userPrompt }
+        ],
+        max_tokens: maxTokens,
+        temperature,
+      });
+
+      return response.choices[0]?.message?.content || '';
+    } catch (error) {
+      this.logger.error('Failed to generate simple response:', error);
+      throw new Error(`OpenAI completion failed: ${error.message}`);
+    }
+  }
+
   async summarizeDocument(text: string, title?: string): Promise<string> {
     try {
-      const prompt = title 
+      const prompt = title
         ? `Erstellen Sie eine prägnante Zusammenfassung des folgenden Dokuments "${title}":\n\n${text}`
         : `Erstellen Sie eine prägnante Zusammenfassung des folgenden Dokuments:\n\n${text}`;
 

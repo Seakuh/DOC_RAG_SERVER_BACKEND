@@ -16,6 +16,8 @@ import { AppService } from './app.service';
 import { ImageGenModule } from './image-gen/image-gen.module';
 import { BillingModule } from './billing/billing.module';
 import { OpenAIModule } from './openai/openai.module';
+import { TerpenesModule } from './terpenes/terpenes.module';
+import { QdrantModule } from './qdrant/qdrant.module';
 
 @Module({
   imports: [
@@ -54,6 +56,8 @@ import { OpenAIModule } from './openai/openai.module';
     ImageGenModule,
     BillingModule,
     OpenAIModule,
+    TerpenesModule,
+    QdrantModule,
   ],
   controllers: [AppController],
   providers: [

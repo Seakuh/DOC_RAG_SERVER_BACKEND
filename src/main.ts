@@ -22,7 +22,10 @@ async function bootstrap() {
   // Enable CORS with more permissive settings for development
   app.use(
     cors({
-      origin: true, // Allow all origins in development
+      origin: [
+        'http://localhost:5500',
+        'http://127.0.0.1:5500'
+      ],
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With', 'X-Client-Id'],
@@ -207,7 +210,7 @@ async function bootstrap() {
   logger.log(`🚀 RAG Backend API is running on: http://localhost:${port}`);
   logger.log(`📚 Swagger documentation: http://localhost:${port}/api`);
   logger.log(`🔍 Health check: http://localhost:${port}/api/v1`);
-  logger.log(`🌿 Strain Finder: http://localhost:${port}/strain-finder.html`);
+  logger.log(`🌿 Terpene & Cannabis App: http://localhost:${port}/index.html`);
 
   // Log environment status
   const requiredEnvVars = ['PINECONE_API_KEY', 'PINECONE_INDEX_NAME', 'OPENAI_API_KEY'];
